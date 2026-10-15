@@ -184,7 +184,7 @@
       fin.classList.toggle('neg', remanente < 0);
     });
     const data = memo.memoData(g, memoOpts());
-    const motivo = data.motivos.map((m) => `<b>${esc(m.doc)} ${esc(m.nro)}</b> ${esc(m.justificacion)}`).join('<br>');
+    const motivo = data.motivos.map((m) => `<b>${esc(m.doc)} ${esc(m.nro)}:</b> ${esc(m.justificacion)}`).join('<br>');
     const notas = data.notas.map((n) => `Nota: Diferencia de ${esc(n.doc)} ${esc(n.nro)} por ${esc(n.remanente)}.- mantener en la cuenta…`).join('<br>');
     card.querySelector(`[data-preview="${gi}"]`).innerHTML =
       `<div><b>MOTIVO:</b><br>${motivo || '—'}</div><div>Filas en la tabla del memo: ${data.items.length}</div>${notas ? `<div>${notas}</div>` : ''}`;

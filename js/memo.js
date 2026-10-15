@@ -134,7 +134,7 @@
       razon_social: group.razon,
       rut: group.rutFmt,
       iniciales: opts.iniciales || '',
-      motivos: sel.map((r, i) => ({ br: i > 0, doc: r.doc, nro: r.nro, justificacion: r.justificacion })),
+      motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: r.justificacion })),
       items,
       notas,
     };

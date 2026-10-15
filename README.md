@@ -38,4 +38,4 @@ node --test tests/*.test.js
 
 La plantilla `templates/memo_template.docx` es el MEMO institucional con marcadores. Para cambiar el formato, edítala en Word conservando los marcadores.
 
-Marcadores disponibles: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, bucle `{#motivos}{doc} {nro} {justificacion}{/motivos}` y fila de tabla `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.
+Marcadores disponibles: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, párrafos `{#motivos}{#primero}MOTIVO :{/primero} {doc} {nro}: {justificacion}{/motivos}` y fila de tabla `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.

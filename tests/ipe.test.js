@@ -74,7 +74,7 @@ test('memos agrupan APLICAR por empresa y excluyen DEUDOR por defecto', () => {
   assert.equal(data.fecha, '14.OCT.2026');
   assert.equal(data.rut, '11.111.111-1');
   assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 1.000', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 5.000' }]);
-  assert.deepEqual(data.motivos, [{ br: false, doc: 'EFE', nro: '100', justificacion: 'Pago duplicado' }]);
+  assert.deepEqual(data.motivos, [{ primero: true, doc: 'EFE', nro: '100', justificacion: 'Pago duplicado' }]);
   assert.deepEqual(data.notas, []);
   assert.match(memo.warnings(uno).join(), /DEUDOR/);
   assert.match(memo.warnings(uno).join(), /supera el saldo en \$ 4\.000/);
