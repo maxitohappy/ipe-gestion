@@ -106,10 +106,33 @@ test('documentos con memo en el historial salen de pendientes', () => {
   const uno = memo.buildGroups(rows).find((g) => g.razon === 'EMPRESA UNO SPA');
   const entry = memo.historialEntry(uno, memo.memoData(uno, { fecha: new Date(2026, 9, 14) }), new Date(2026, 9, 14, 10));
   assert.equal(entry.documentos.length, 1); // la fila DEUDOR no se incluyó
-  const claves = new Set(entry.documentos.map((d) => d.key));
-  const pendientes = memo.buildGroups(rows, (k) => claves.has(k));
-  // EMPRESA UNO solo conserva su fila DEUDOR, por lo que ya no tiene memo pendiente
+  const idx = memo.indiceHistorial([entry]);
+  const pendientes = memo.buildGroups(rows, idx);
+  // Saldo sin cambio: EMPRESA UNO solo conserva su fila DEUDOR, por lo que ya no tiene memo pendiente
   assert.deepEqual(pendientes.map((g) => g.razon), ['EMPRESA DOS LTDA']);
+});
+
+test('IPE con memo previo vuelve a pendientes si su saldo cambia (saldo dinámico)', () => {
+  const mes = (saldo) => parser.parseAoa([HEAD, row('APLICAR', 77777777, 7, 'EMPRESA X', 'EFE', 9, '01-09-2026', saldo, 'ACREEDOR', 'Pago en exceso')]).rows;
+  // Mes 1: saldo 100, memo aplica 90 → quedan 10
+  const [g1] = memo.buildGroups(mes(100));
+  g1.rows[0].aplicaciones = [{ docto: 'Pagar FEE 1', monto: 90 }];
+  const historial = [memo.historialEntry(g1, memo.memoData(g1, { fecha: new Date(2026, 8, 30) }), new Date(2026, 8, 30))];
+  let idx = memo.indiceHistorial(historial);
+
+  // Mes 2, Contabilidad no ha procesado el memo: saldo sigue en 100 → oculto
+  assert.equal(memo.buildGroups(mes(100), idx).length, 0);
+  // Mes 2, memo procesado: saldo 10 → vuelve con referencia al memo previo
+  const [g2] = memo.buildGroups(mes(10), idx);
+  assert.equal(g2.rows[0].previo.saldo, 100);
+  assert.equal(g2.rows[0].previo.aplicado, 90);
+
+  // Mes 2 se hace memo por los 10 sin aplicar nada aún; mes 3 el cliente suma 20 → saldo 30 vuelve a aparecer
+  historial.push(memo.historialEntry(g2, memo.memoData(g2, { fecha: new Date(2026, 9, 30) }), new Date(2026, 9, 30)));
+  idx = memo.indiceHistorial(historial);
+  assert.equal(memo.buildGroups(mes(10), idx).length, 0);
+  const [g3] = memo.buildGroups(mes(30), idx);
+  assert.equal(g3.rows[0].previo.saldo, 10); // compara contra el memo más reciente
 });
 
 test('devoluciones netean DEUDOR y exportan resumen/detalle', () => {

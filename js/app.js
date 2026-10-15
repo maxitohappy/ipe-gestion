@@ -41,10 +41,6 @@
     if (!writeStore(HIST_KEY, state.historial))
       alert('No se pudo guardar el historial en este navegador. Descarga un respaldo para no perderlo.');
   }
-  function clavesHistorial() {
-    return new Set(state.historial.flatMap((e) => e.documentos.map((d) => d.key)));
-  }
-
   // ---------- carga ----------
   async function handleFile(file) {
     if (!file) return;
@@ -72,9 +68,9 @@
   }
 
   function rebuildMemoGroups() {
-    const claves = clavesHistorial();
-    state.memoGroups = memo.buildGroups(state.rows, (k) => claves.has(k));
-    state.ocultos = state.rows.filter((r) => r.categoria === 'APLICAR' && claves.has(memo.rowKey(r))).length;
+    const idx = memo.indiceHistorial(state.historial);
+    state.memoGroups = memo.buildGroups(state.rows, idx);
+    state.ocultos = state.rows.filter((r) => r.categoria === 'APLICAR' && memo.ocultoPorHistorial(r, idx.get(memo.rowKey(r)))).length;
   }
 
   // ---------- resumen ----------
@@ -119,7 +115,7 @@
     $('n-memos').textContent = groups.length;
     $('aviso-columnas').hidden = state.tieneColumnasAplicar;
     $('memos-resumen').textContent = `${groups.length} empresa(s) con IPE pendientes de memo.`;
-    $('ocultos-hist').textContent = state.ocultos ? `${state.ocultos} documento(s) APLICAR no se muestran porque ya tienen memo en el Historial.` : '';
+    $('ocultos-hist').textContent = state.ocultos ? `${state.ocultos} documento(s) APLICAR no se muestran: ya tienen memo en el Historial y su saldo no ha cambiado (Contabilidad aún no lo procesa).` : '';
     $('btn-zip').disabled = !groups.length;
     $('memos').innerHTML = groups.map((g, gi) => cardHtml(g, gi)).join('') || '<p class="muted">No hay memos pendientes.</p>';
     groups.forEach((g, gi) => refreshGroup(gi));
@@ -143,7 +139,7 @@
             ${g.rows.map((r, ri) => `
               <tr class="${r.naturaleza === 'DEUDOR' ? 'deudor' : ''}">
                 <td><input type="checkbox" data-f="incluir" data-r="${ri}" ${r.incluir ? 'checked' : ''} aria-label="Incluir ${esc(r.doc)} ${esc(r.nro)}"></td>
-                <td>${esc(r.doc)}</td><td>${esc(r.nro)}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
+                <td>${esc(r.doc)}</td><td>${esc(r.nro)}${r.previo ? `<div class="prev">Memo previo ${esc(r.previo.fechaMemo)}: saldo entonces ${clp(r.previo.saldo)}, aplicado ${clp(r.previo.aplicado)}. Saldo actual ${clp(r.saldo)}.</div>` : ''}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
                 <td class="n">${clp(r.saldo)}</td><td>${esc(r.naturaleza)}</td>
                 <td><input type="text" data-f="justificacion" data-r="${ri}" value="${esc(r.justificacion)}"></td>
                 <td class="apls">

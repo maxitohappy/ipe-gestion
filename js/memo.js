@@ -36,15 +36,39 @@
     return out;
   }
 
-  /** Grupos de memo: empresas con filas APLICAR que aún no están en el historial. */
-  function buildGroups(rows, enHistorial = () => false) {
-    const pendientes = rows.filter((r) => r.categoria === 'APLICAR' && !enHistorial(rowKey(r)));
+  /**
+   * Índice del historial: por cada IPE, el registro de su memo más reciente
+   * ({ saldo, aplicado, remanente, fechaMemo, generado }).
+   */
+  function indiceHistorial(historial) {
+    const idx = new Map();
+    for (const e of historial) {
+      for (const d of e.documentos) {
+        const prev = idx.get(d.key);
+        if (!prev || e.generado > prev.generado) idx.set(d.key, { ...d, fechaMemo: e.fechaMemo, generado: e.generado });
+      }
+    }
+    return idx;
+  }
+
+  /**
+   * Un IPE con memo previo queda oculto solo si su saldo no cambió (Contabilidad aún no procesa el memo).
+   * Si el saldo cambió (se aplicó una parte, o el cliente generó más saldo), vuelve a quedar pendiente.
+   */
+  function ocultoPorHistorial(r, previo) {
+    return Boolean(previo) && Math.round(previo.saldo) === Math.round(r.saldo);
+  }
+
+  /** Grupos de memo: empresas con filas APLICAR pendientes. `idx` es el índice del historial. */
+  function buildGroups(rows, idx = new Map()) {
+    const pendientes = rows.filter((r) => r.categoria === 'APLICAR' && !ocultoPorHistorial(r, idx.get(rowKey(r))));
     return groupByEmpresa(pendientes)
       .map((g) => ({
         ...g,
         rows: g.rows.map((r) => ({
           ...r,
           key: rowKey(r),
+          previo: idx.get(rowKey(r)) || null,
           incluir: r.naturaleza !== 'DEUDOR',
           aplicaciones: parseAplicaciones(r.doctoAplicar, r.montoAplicar),
         })),
@@ -149,5 +173,5 @@
     return doc.getZip();
   }
 
-  return { rowKey, buildGroups, groupByEmpresa, parseAplicaciones, calcular, warnings, memoData, fileName, historialEntry, render };
+  return { rowKey, indiceHistorial, ocultoPorHistorial, buildGroups, groupByEmpresa, parseAplicaciones, calcular, warnings, memoData, fileName, historialEntry, render };
 });

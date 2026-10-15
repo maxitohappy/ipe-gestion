@@ -4,7 +4,7 @@ Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE
 
 - **Memos (APLICAR):** agrupa por empresa los IPE con estado `APLICAR` en *MIS APUNTES* y genera un memo en Word (.docx) por empresa con el formato institucional (Arial 11, firma de Eliana Rojas Silva). El Nº de memo queda en blanco para completarlo en Word.
   - Un IPE puede aplicarse a **varios documentos**: el saldo se descuenta en cada aplicación (columna *Monto* de la tabla) y, si queda diferencia, el memo agrega *"Nota: Diferencia de … mantener en la cuenta 'acreedores por ingresos percibidos en exceso' …"*.
-- **Historial de memos:** cada memo descargado queda registrado y sus documentos dejan de aparecer en *Memos*. Desde el historial se puede volver a descargar un memo, devolverlo a pendientes, exportar a Excel o respaldar/importar (el historial se guarda en el navegador).
+- **Historial de memos:** cada memo descargado queda registrado con el saldo de cada IPE. Al cargar el Excel de otro mes, un IPE con memo previo se oculta solo si su saldo **no cambió** (Contabilidad aún no lo procesa); si cambió (aplicación parcial o nuevo saldo del cliente) vuelve a *Memos* indicando el memo anterior. Desde el historial se puede volver a descargar un memo, devolverlo a pendientes, exportar a Excel o respaldar/importar (el historial se guarda en el navegador).
 - **Devoluciones:** consolida los IPE con estado `DEVOLVER` por empresa y descarga una planilla Excel (hojas *Resumen* y *Detalle*) con columnas para los datos bancarios.
 - **Resumen y alertas:** saldo por estado, antigüedad y alertas (APLICAR sin documento a aplicar, sin justificación, estados no estándar, correos sin respuesta por más de 30 días, posibles duplicados, filas sin gestión).
 
