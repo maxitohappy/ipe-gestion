@@ -163,3 +163,12 @@ test('ultimaGestion toma el último paso numerado', () => {
   assert.equal(parser.ultimaGestion('1) Correo a cliente 2 ) Cliente responde. 12)Correo final'), 'Correo final');
   assert.equal(parser.ultimaGestion(''), '');
 });
+
+test('js/plantilla.js corresponde a templates/memo_template.docx (ejecutar scripts/embed_template.py si falla)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const js = fs.readFileSync(path.join(__dirname, '../js/plantilla.js'), 'utf8');
+  const b64 = js.match(/plantillaB64 = "([^"]+)"/)[1];
+  const docx = fs.readFileSync(path.join(__dirname, '../templates/memo_template.docx'));
+  assert.ok(Buffer.from(b64, 'base64').equals(docx));
+});

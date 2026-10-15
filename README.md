@@ -23,6 +23,16 @@ Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE
 5. En **Devoluciones**: descarga la planilla para Tesorería.
 6. En **Historial**: descarga un respaldo periódicamente.
 
+## Uso sin internet (respaldo)
+
+Si GitHub o internet no están disponibles, la app funciona igual desde el computador:
+
+1. Descarga la versión local desde el enlace **"Descargar versión sin internet"** de la página (o https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip). Hazlo con anticipación y vuelve a descargarla cuando haya actualizaciones.
+2. Descomprime el .zip en una carpeta del computador.
+3. Abre **index.html** con doble clic (Chrome o Edge). Arriba aparecerá *"Modo sin internet"*.
+
+El historial de memos se guarda por separado en cada modo (en línea y sin internet). Para pasarlo de uno a otro usa **Historial → Descargar respaldo** y luego **Importar respaldo**.
+
 El estado se lee de la columna *MIS APUNTES* (no importa mayúsculas ni espacios). Las columnas se reconocen por su nombre, así que el orden y el nombre de la hoja pueden cambiar de un mes a otro.
 
 ## Desarrollo
@@ -30,8 +40,10 @@ El estado se lee de la columna *MIS APUNTES* (no importa mayúsculas ni espacios
 Sitio estático (HTML + JavaScript), sin compilación. Librerías incluidas en `vendor/`: SheetJS 0.20.3, PizZip 3.1.7, docxtemplater 3.60.0, FileSaver 2.0.5.
 
 ```bash
-# probar localmente (fetch de la plantilla requiere servidor http)
+# probar: basta abrir index.html; o con servidor local
 npx http-server .
+# si cambia templates/memo_template.docx, regenerar la plantilla incrustada
+python scripts/embed_template.py
 # pruebas
 node --test tests/*.test.js
 ```

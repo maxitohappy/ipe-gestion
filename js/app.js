@@ -191,11 +191,15 @@
     card.querySelector(`[data-warn="${gi}"]`).innerHTML = memo.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
   }
 
+  // La plantilla viene incrustada en js/plantilla.js: funciona en línea y abriendo index.html sin internet.
   async function getTemplate() {
     if (!state.template) {
-      const res = await fetch('templates/memo_template.docx', { cache: 'no-cache' });
-      if (!res.ok) throw new Error('No se pudo cargar la plantilla del memo.');
-      state.template = await res.arrayBuffer();
+      const b64 = window.IPE.plantillaB64;
+      if (!b64) throw new Error('No se encontró la plantilla del memo (js/plantilla.js).');
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      state.template = bytes.buffer;
     }
     return state.template;
   }
@@ -362,6 +366,9 @@
 
   // ---------- eventos ----------
   function init() {
+    const local = location.protocol === 'file:';
+    $('modo-local').hidden = !local;
+    $('modo-web').hidden = local;
     loadConfig();
     loadHistorial();
     $('archivo').addEventListener('change', (e) => handleFile(e.target.files[0]));
