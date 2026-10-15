@@ -1,0 +1,38 @@
+# Gestión IPE
+
+Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE)** a partir del Excel de control.
+
+- **Memos (APLICAR):** agrupa por empresa los IPE con estado `APLICAR` en *MIS APUNTES* y genera un memo en Word (.docx) por empresa con el formato institucional. El Nº de memo queda en blanco para completarlo en Word.
+- **Devoluciones:** consolida los IPE con estado `DEVOLVER` por empresa y descarga una planilla Excel (hojas *Resumen* y *Detalle*) con columnas para los datos bancarios.
+- **Resumen y alertas:** saldo por estado, antigüedad y alertas (APLICAR sin documento a aplicar, sin justificación, estados no estándar, correos sin respuesta por más de 30 días, posibles duplicados, filas sin gestión).
+
+**Privacidad:** el Excel se procesa solo en el navegador. Ningún dato se envía a internet ni se guarda en este repositorio.
+
+## Uso mensual
+
+1. Abre el Excel IPE del mes y verifica que tenga, al final de la hoja, las columnas:
+   - `DOCTO A APLICAR` (ej. `Pagar FEE 466934`)
+   - `MONTO A APLICAR` (ej. `701483`)
+
+   Complétalas en las filas con estado `APLICAR` usando la deuda del cliente del sistema contable.
+2. Entra a la página publicada y arrastra el Excel.
+3. Revisa la pestaña **Resumen y alertas**.
+4. En **Memos**: revisa fecha, iniciales y firmante (se recuerdan para la próxima vez), marca o desmarca documentos, corrige el texto si hace falta y descarga cada memo o todos en un .zip.
+5. En **Devoluciones**: descarga la planilla para Tesorería.
+
+El estado se lee de la columna *MIS APUNTES* (no importa mayúsculas ni espacios). Las columnas se reconocen por su nombre, así que el orden y el nombre de la hoja pueden cambiar de un mes a otro.
+
+## Desarrollo
+
+Sitio estático (HTML + JavaScript), sin compilación. Librerías incluidas en `vendor/`: SheetJS 0.20.3, PizZip 3.1.7, docxtemplater 3.60.0, FileSaver 2.0.5.
+
+```bash
+# probar localmente (fetch de la plantilla requiere servidor http)
+npx http-server .
+# pruebas
+node --test tests/*.test.js
+```
+
+La plantilla `templates/memo_template.docx` es el MEMO institucional con marcadores. Para cambiar el formato, edítala en Word conservando los marcadores.
+
+Marcadores disponibles: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, `{firmante}`, `{cargo_firmante}`, bucle `{#motivos}{doc} {nro} {justificacion}{/motivos}` y fila de tabla `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}`.

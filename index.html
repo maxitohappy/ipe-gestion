@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestión IPE</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <h1>Gestión IPE</h1>
+      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="carga" class="card drop">
+      <label for="archivo" class="drop-label">
+        <strong>Selecciona o arrastra el Excel IPE del mes</strong>
+        <span>(ej. "NUEVO IPE Septiembre 2026.xlsx")</span>
+      </label>
+      <input type="file" id="archivo" accept=".xlsx,.xls,.xlsm">
+      <p id="estado-carga" class="muted"></p>
+    </section>
+
+    <section id="contenido" hidden>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="resumen" aria-selected="true">Resumen y alertas</button>
+        <button role="tab" data-tab="memos" aria-selected="false">Memos (APLICAR) <span id="n-memos" class="badge"></span></button>
+        <button role="tab" data-tab="devoluciones" aria-selected="false">Devoluciones <span id="n-dev" class="badge"></span></button>
+      </nav>
+
+      <div id="tab-resumen" class="tab">
+        <div id="kpis" class="kpis"></div>
+        <div class="grid2">
+          <div class="card"><h2>Por estado (MIS APUNTES)</h2><div id="por-estado"></div></div>
+          <div class="card"><h2>Antigüedad</h2><div id="antiguedad"></div></div>
+        </div>
+        <div class="card">
+          <div class="row-between">
+            <h2>Alertas <span id="n-alertas" class="badge"></span></h2>
+            <select id="filtro-alertas" aria-label="Filtrar alertas"></select>
+          </div>
+          <div id="alertas" class="scroll"></div>
+        </div>
+      </div>
+
+      <div id="tab-memos" class="tab" hidden>
+        <div class="card config">
+          <h2>Datos del memo</h2>
+          <div class="form">
+            <label>Fecha<input type="date" id="cfg-fecha"></label>
+            <label>Iniciales<input type="text" id="cfg-iniciales" placeholder="ERS/yaa"></label>
+            <label>Firmante<input type="text" id="cfg-firmante" placeholder="NOMBRE APELLIDO"></label>
+            <label>Cargo firmante<input type="text" id="cfg-cargo"></label>
+          </div>
+          <p class="muted">El Nº de memo queda en blanco para completarlo en Word. Estos datos se recuerdan en este navegador.</p>
+        </div>
+        <div id="aviso-columnas" class="notice" hidden>
+          El Excel no tiene las columnas <b>DOCTO A APLICAR</b> y <b>MONTO A APLICAR</b>. Agrégalas al final de la hoja para que el memo salga completo, o complétalas aquí abajo antes de descargar.
+        </div>
+        <div class="row-between">
+          <p class="muted" id="memos-resumen"></p>
+          <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
+        </div>
+        <div id="memos"></div>
+      </div>
+
+      <div id="tab-devoluciones" class="tab" hidden>
+        <div class="row-between">
+          <p class="muted" id="dev-resumen"></p>
+          <button id="btn-dev" class="primary">Descargar planilla de devoluciones (.xlsx)</button>
+        </div>
+        <div class="card"><div id="devoluciones" class="scroll"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/pizzip.min.js"></script>
+  <script src="vendor/docxtemplater.min.js"></script>
+  <script src="vendor/FileSaver.min.js"></script>
+  <script src="js/format.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/memo.js"></script>
+  <script src="js/devoluciones.js"></script>
+  <script src="js/resumen.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

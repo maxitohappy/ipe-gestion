@@ -1,0 +1,12 @@
+# Nunca subir datos reales de clientes
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.doc
+*.pdf
+!templates/memo_template.docx
+node_modules/
+
+# Script de construcción de plantilla: contiene textos del memo original (solo local)
+tools/
