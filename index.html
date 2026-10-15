@@ -29,6 +29,7 @@
         <button role="tab" data-tab="resumen" aria-selected="true">Resumen y alertas</button>
         <button role="tab" data-tab="memos" aria-selected="false">Memos (APLICAR) <span id="n-memos" class="badge"></span></button>
         <button role="tab" data-tab="devoluciones" aria-selected="false">Devoluciones <span id="n-dev" class="badge"></span></button>
+        <button role="tab" data-tab="historial" aria-selected="false">Historial de memos <span id="n-hist" class="badge"></span></button>
       </nav>
 
       <div id="tab-resumen" class="tab">
@@ -52,14 +53,14 @@
           <div class="form">
             <label>Fecha<input type="date" id="cfg-fecha"></label>
             <label>Iniciales<input type="text" id="cfg-iniciales" placeholder="ERS/yaa"></label>
-            <label>Firmante<input type="text" id="cfg-firmante" placeholder="NOMBRE APELLIDO"></label>
-            <label>Cargo firmante<input type="text" id="cfg-cargo"></label>
           </div>
-          <p class="muted">El Nº de memo queda en blanco para completarlo en Word. Estos datos se recuerdan en este navegador.</p>
+          <p class="muted">El Nº de memo queda en blanco para completarlo en Word. Firma: ELIANA ROJAS SILVA, Encargada Sección Gestión de Ingresos.</p>
         </div>
         <div id="aviso-columnas" class="notice" hidden>
           El Excel no tiene las columnas <b>DOCTO A APLICAR</b> y <b>MONTO A APLICAR</b>. Agrégalas al final de la hoja para que el memo salga completo, o complétalas aquí abajo antes de descargar.
         </div>
+        <p class="muted">Cada ingreso anticipado puede aplicarse a varios documentos con <b>+ Agregar documento</b>: el saldo se descuenta en cada aplicación y, si queda diferencia, el memo incluye la Nota correspondiente. Al descargar un memo, sus documentos pasan al <b>Historial</b> y dejan de aparecer aquí.</p>
+        <p id="ocultos-hist" class="muted"></p>
         <div class="row-between">
           <p class="muted" id="memos-resumen"></p>
           <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
@@ -73,6 +74,21 @@
           <button id="btn-dev" class="primary">Descargar planilla de devoluciones (.xlsx)</button>
         </div>
         <div class="card"><div id="devoluciones" class="scroll"></div></div>
+      </div>
+
+      <div id="tab-historial" class="tab" hidden>
+        <div class="notice">
+          El historial se guarda en <b>este navegador</b>. Descarga un respaldo periódicamente (y para usarlo en otro computador, impórtalo allá).
+        </div>
+        <div class="row-between">
+          <p class="muted" id="hist-resumen"></p>
+          <div class="actions">
+            <button id="btn-hist-xlsx" class="secondary">Exportar a Excel</button>
+            <button id="btn-hist-backup" class="secondary">Descargar respaldo</button>
+            <label class="secondary file-btn">Importar respaldo<input type="file" id="hist-import" accept=".json" hidden></label>
+          </div>
+        </div>
+        <div class="card"><div id="historial" class="scroll"></div></div>
       </div>
     </section>
   </main>

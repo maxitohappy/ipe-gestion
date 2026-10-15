@@ -73,12 +73,43 @@ test('memos agrupan APLICAR por empresa y excluyen DEUDOR por defecto', () => {
   const data = memo.memoData(uno, { fecha: new Date(2026, 9, 14), iniciales: 'AB/cd' });
   assert.equal(data.fecha, '14.OCT.2026');
   assert.equal(data.rut, '11.111.111-1');
-  assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 1.000', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '5.000' }]);
+  assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 1.000', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 5.000' }]);
   assert.deepEqual(data.motivos, [{ br: false, doc: 'EFE', nro: '100', justificacion: 'Pago duplicado' }]);
+  assert.deepEqual(data.notas, []);
   assert.match(memo.warnings(uno).join(), /DEUDOR/);
+  assert.match(memo.warnings(uno).join(), /supera el saldo en \$ 4\.000/);
   const dos = groups.find((g) => g.razon === 'EMPRESA DOS LTDA');
   assert.match(memo.warnings(dos).join(), /sin justificación/);
   assert.equal(memo.fileName(dos), 'MEMO_IPE_EMPRESA_DOS_LTDA_22222222.docx');
+});
+
+test('varias aplicaciones descuentan el saldo y generan nota de diferencia (memo Nº 176)', () => {
+  const aoa = [HEAD, row('APLICAR', 100300, 3, 'AEROLINEA X', 'DOL', 805, '15-09-2026', 11314, 'ACREEDOR', 'Saldo depósito',
+    '', 'Pagar FEE 263576; Pagar FEE 262729', '2.005; 2327')];
+  const [g] = memo.buildGroups(parser.parseAoa(aoa).rows);
+  assert.deepEqual(g.rows[0].aplicaciones, [{ docto: 'Pagar FEE 263576', monto: 2005 }, { docto: 'Pagar FEE 262729', monto: 2327 }]);
+  const data = memo.memoData(g, { fecha: new Date(2026, 9, 13) });
+  assert.deepEqual(data.items.map((i) => [i.monto, i.docto_aplicar, i.monto_aplicar]), [
+    ['$ 11.314', 'Pagar FEE 263576', '$ 2.005'],
+    ['$ 9.309', 'Pagar FEE 262729', '$ 2.327'],
+  ]);
+  assert.deepEqual(data.notas, [{ doc: 'DOL', nro: '805', remanente: '$ 6.982' }]);
+  assert.deepEqual(memo.warnings(g), []);
+
+  // aplicar todo el saldo no genera nota
+  g.rows[0].aplicaciones.push({ docto: 'Pagar FEE 3', monto: 6982 });
+  assert.deepEqual(memo.memoData(g, { fecha: new Date() }).notas, []);
+});
+
+test('documentos con memo en el historial salen de pendientes', () => {
+  const { rows } = parser.parseAoa(AOA);
+  const uno = memo.buildGroups(rows).find((g) => g.razon === 'EMPRESA UNO SPA');
+  const entry = memo.historialEntry(uno, memo.memoData(uno, { fecha: new Date(2026, 9, 14) }), new Date(2026, 9, 14, 10));
+  assert.equal(entry.documentos.length, 1); // la fila DEUDOR no se incluyó
+  const claves = new Set(entry.documentos.map((d) => d.key));
+  const pendientes = memo.buildGroups(rows, (k) => claves.has(k));
+  // EMPRESA UNO solo conserva su fila DEUDOR, por lo que ya no tiene memo pendiente
+  assert.deepEqual(pendientes.map((g) => g.razon), ['EMPRESA DOS LTDA']);
 });
 
 test('devoluciones netean DEUDOR y exportan resumen/detalle', () => {

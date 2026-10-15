@@ -2,7 +2,9 @@
 
 Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE)** a partir del Excel de control.
 
-- **Memos (APLICAR):** agrupa por empresa los IPE con estado `APLICAR` en *MIS APUNTES* y genera un memo en Word (.docx) por empresa con el formato institucional. El Nº de memo queda en blanco para completarlo en Word.
+- **Memos (APLICAR):** agrupa por empresa los IPE con estado `APLICAR` en *MIS APUNTES* y genera un memo en Word (.docx) por empresa con el formato institucional (Arial 11, firma de Eliana Rojas Silva). El Nº de memo queda en blanco para completarlo en Word.
+  - Un IPE puede aplicarse a **varios documentos**: el saldo se descuenta en cada aplicación (columna *Monto* de la tabla) y, si queda diferencia, el memo agrega *"Nota: Diferencia de … mantener en la cuenta 'acreedores por ingresos percibidos en exceso' …"*.
+- **Historial de memos:** cada memo descargado queda registrado y sus documentos dejan de aparecer en *Memos*. Desde el historial se puede volver a descargar un memo, devolverlo a pendientes, exportar a Excel o respaldar/importar (el historial se guarda en el navegador).
 - **Devoluciones:** consolida los IPE con estado `DEVOLVER` por empresa y descarga una planilla Excel (hojas *Resumen* y *Detalle*) con columnas para los datos bancarios.
 - **Resumen y alertas:** saldo por estado, antigüedad y alertas (APLICAR sin documento a aplicar, sin justificación, estados no estándar, correos sin respuesta por más de 30 días, posibles duplicados, filas sin gestión).
 
@@ -14,11 +16,12 @@ Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE
    - `DOCTO A APLICAR` (ej. `Pagar FEE 466934`)
    - `MONTO A APLICAR` (ej. `701483`)
 
-   Complétalas en las filas con estado `APLICAR` usando la deuda del cliente del sistema contable.
+   Complétalas en las filas con estado `APLICAR` usando la deuda del cliente del sistema contable. Para varios documentos sepáralos con `;` en el mismo orden (ej. `Pagar FEE 263576; Pagar FEE 262729` y `2005; 2327`), o agrégalos en la app con **+ Agregar documento**.
 2. Entra a la página publicada y arrastra el Excel.
 3. Revisa la pestaña **Resumen y alertas**.
-4. En **Memos**: revisa fecha, iniciales y firmante (se recuerdan para la próxima vez), marca o desmarca documentos, corrige el texto si hace falta y descarga cada memo o todos en un .zip.
+4. En **Memos**: revisa fecha e iniciales, marca o desmarca documentos, ajusta los documentos a aplicar y descarga cada memo o todos en un .zip. Los memos descargados pasan al **Historial**.
 5. En **Devoluciones**: descarga la planilla para Tesorería.
+6. En **Historial**: descarga un respaldo periódicamente.
 
 El estado se lee de la columna *MIS APUNTES* (no importa mayúsculas ni espacios). Las columnas se reconocen por su nombre, así que el orden y el nombre de la hoja pueden cambiar de un mes a otro.
 
@@ -35,4 +38,4 @@ node --test tests/*.test.js
 
 La plantilla `templates/memo_template.docx` es el MEMO institucional con marcadores. Para cambiar el formato, edítala en Word conservando los marcadores.
 
-Marcadores disponibles: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, `{firmante}`, `{cargo_firmante}`, bucle `{#motivos}{doc} {nro} {justificacion}{/motivos}` y fila de tabla `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}`.
+Marcadores disponibles: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, bucle `{#motivos}{doc} {nro} {justificacion}{/motivos}` y fila de tabla `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.
