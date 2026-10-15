@@ -169,7 +169,10 @@
   function render(templateBuffer, data, PizZip, Docxtemplater) {
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => '' });
-    doc.render(data);
+    // "primero" marca el documento que lleva el rótulo "MOTIVO :". Se recalcula siempre para que los
+    // memos guardados en el historial con versiones anteriores (que no lo traían) se generen completos.
+    const motivos = (data.motivos || []).map((m, i) => ({ ...m, primero: i === 0 }));
+    doc.render({ ...data, motivos, notas: data.notas || [] });
     return doc.getZip();
   }
 
