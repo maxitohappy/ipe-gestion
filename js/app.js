@@ -42,63 +42,137 @@
       alert('No se pudo guardar el historial en este navegador. Descarga un respaldo para no perderlo.');
   }
   // ---------- carga ----------
+  const MSG_LEYENDO = 'Leyendo el Excel… (los libros con muchas hojas pueden tardar unos segundos)';
+  const pausa = () => new Promise((r) => setTimeout(r, 50)); // deja que el navegador muestre el mensaje
+
+  /** Lee un libro: revisa las primeras filas de cada hoja y ordena las hojas con estructura IPE. */
+  async function leerLibro(file) {
+    const buf = await file.arrayBuffer();
+    const cabeceras = XLSX.read(buf, { cellDates: true, sheetRows: 30 });
+    const hojas = cabeceras.SheetNames.map((nombre) => ({
+      nombre,
+      inicio: XLSX.utils.sheet_to_json(cabeceras.Sheets[nombre], { header: 1, raw: true, defval: '' }),
+    }));
+    const { elegida, candidatas, evaluadas } = parser.elegirHoja(hojas);
+    if (!elegida) {
+      const detalle = evaluadas.map((h) => `"${h.nombre}" (faltan: ${h.faltan.join(', ')})`).join('; ');
+      throw new Error(`Ninguna hoja del Excel "${file.name}" tiene la estructura IPE. Hojas revisadas: ${detalle}.`);
+    }
+    return { buf, nombreArchivo: file.name, elegida, candidatas, cache: {} };
+  }
+
+  /** Lectura completa de una sola hoja (los libros pueden traer hojas con más de un millón de filas). */
+  function leerHoja(libro, nombre) {
+    if (!libro.cache[nombre]) {
+      const wb = XLSX.read(libro.buf, { cellDates: true, dense: true, sheets: nombre });
+      libro.cache[nombre] = XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1, raw: true, defval: '', blankrows: false });
+    }
+    return libro.cache[nombre];
+  }
+
+  function mostrarError(err) {
+    console.error(err);
+    $('estado-carga').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
+  }
+
   async function handleFile(file) {
     if (!file) return;
-    $('estado-carga').textContent = 'Leyendo el Excel… (los libros con muchas hojas pueden tardar unos segundos)';
-    // Deja que el navegador muestre el mensaje antes de la lectura, que bloquea la página mientras dura.
-    await new Promise((r) => setTimeout(r, 50));
+    $('estado-carga').textContent = MSG_LEYENDO;
+    await pausa();
     try {
-      const buf = await file.arrayBuffer();
-      // 1) Lectura rápida: solo las primeras 30 filas de cada hoja, para encontrar la hoja de trabajo IPE.
-      const cabeceras = XLSX.read(buf, { cellDates: true, sheetRows: 30 });
-      const hojas = cabeceras.SheetNames.map((nombre) => ({
-        nombre,
-        inicio: XLSX.utils.sheet_to_json(cabeceras.Sheets[nombre], { header: 1, raw: true, defval: '' }),
-      }));
-      const { elegida, candidatas, evaluadas } = parser.elegirHoja(hojas);
-      if (!elegida) {
-        const detalle = evaluadas.map((h) => `"${h.nombre}" (faltan: ${h.faltan.join(', ')})`).join('; ');
-        throw new Error(`Ninguna hoja del Excel tiene la estructura IPE. Hojas revisadas: ${detalle}.`);
-      }
-      state.buf = buf;
-      state.hojaCache = {};
-      state.nombreArchivo = file.name;
-      state.candidatas = candidatas;
-      cargarHoja(elegida.nombre);
+      state.libro = await leerLibro(file);
+      cargarHoja(state.libro.elegida.nombre);
     } catch (err) {
-      console.error(err);
       $('selector-hoja').hidden = true;
       $('aviso-estado').hidden = true;
-      $('estado-carga').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
+      $('info-copia').hidden = true;
+      mostrarError(err);
     }
   }
 
   function cargarHoja(nombre) {
-    // 2) Lectura completa solo de la hoja elegida (los libros pueden traer hojas con más de un millón de filas).
-    if (!state.hojaCache[nombre]) {
-      const wb = XLSX.read(state.buf, { cellDates: true, dense: true, sheets: nombre });
-      state.hojaCache[nombre] = XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1, raw: true, defval: '', blankrows: false });
+    const parsed = parser.parseAoa(leerHoja(state.libro, nombre));
+    state.hoja = nombre;
+    state.parsed = parsed;
+    state.copia = null;
+    $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(state.libro.nombreArchivo)} — hoja "${esc(nombre)}", ${parsed.rows.length} registros.`;
+    $('sel-hoja').innerHTML = state.libro.candidatas.map((h) =>
+      `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MIS APUNTES)'}</option>`).join('');
+    $('selector-hoja').hidden = state.libro.candidatas.length < 2;
+    usarFilas(parsed.rows, parsed.tieneEstado);
+  }
+
+  /** Copia MIS APUNTES desde el Excel de otro mes (el que sí tiene esa columna). */
+  async function copiarApuntes(file) {
+    if (!file) return;
+    const previo = $('estado-carga').innerHTML;
+    $('estado-carga').textContent = MSG_LEYENDO;
+    await pausa();
+    try {
+      const libro = await leerLibro(file);
+      const hoja = libro.candidatas.find((h) => h.tieneEstado);
+      if (!hoja) throw new Error(`"${file.name}" no tiene la columna MIS APUNTES: elige el Excel del mes anterior en que la completaste.`);
+      const origen = parser.parseAoa(leerHoja(libro, hoja.nombre)).rows;
+      const res = parser.copiarEstados(state.parsed.rows, origen);
+      state.copia = { archivo: file.name, hoja: hoja.nombre, ...res };
+      $('estado-carga').innerHTML = previo;
+      usarFilas(res.rows, true);
+    } catch (err) {
+      mostrarError(err);
     }
-    const aoa = state.hojaCache[nombre];
-    const parsed = parser.parseAoa(aoa);
-    state.rows = parsed.rows;
-    state.tieneEstado = parsed.tieneEstado;
-    state.tieneColumnasAplicar = parsed.tieneColumnasAplicar;
+  }
+
+  function usarFilas(rows, tieneEstado) {
+    state.rows = rows;
+    state.tieneEstado = tieneEstado;
+    state.tieneColumnasAplicar = state.parsed.tieneColumnasAplicar;
     state.devGroups = devoluciones.buildGroups(state.rows);
     rebuildMemoGroups();
 
-    $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(state.nombreArchivo)} — hoja "${esc(nombre)}", ${state.rows.length} registros.`;
-    const sel = $('sel-hoja');
-    sel.innerHTML = state.candidatas.map((h) =>
-      `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MIS APUNTES)'}</option>`).join('');
-    $('selector-hoja').hidden = state.candidatas.length < 2;
-    $('aviso-estado').hidden = parsed.tieneEstado;
+    $('aviso-estado').hidden = tieneEstado;
+    $('info-copia').hidden = !state.copia;
+    if (state.copia) {
+      const c = state.copia;
+      $('info-copia-texto').innerHTML =
+        `Se copiaron los <b>MIS APUNTES</b> de <b>${c.exactos + c.porDocumento}</b> de ${rows.length} registros desde "${esc(c.archivo)}" ` +
+        `(${c.exactos} con el mismo comprobante y ${c.porDocumento} por documento). ` +
+        `<b>${c.sinCoincidencia}</b> registros son nuevos y quedan sin estado: aparecen como "SIN ESTADO" en el resumen y en las alertas.`;
+    }
 
     $('contenido').hidden = false;
     renderResumen();
     renderMemos();
     renderDevoluciones();
     renderHistorial();
+  }
+
+  /** Descarga la hoja de trabajo con la columna MIS APUNTES (columna B), para seguir trabajando en Excel. */
+  function descargarHojaTrabajo() {
+    const aoa = leerHoja(state.libro, state.hoja);
+    const { filaEncabezado: h, columnas } = state.parsed;
+    const estados = new Map(state.rows.map((r) => [r.fila, r.estado]));
+    const tieneCol = columnas.estado !== undefined;
+    const salida = aoa.map((fila, i) => {
+      const f = [...fila];
+      const valor = i === h ? 'MIS APUNTES' : i > h ? (estados.get(i + 1) ?? '') : '';
+      if (tieneCol) f[columnas.estado] = i < h ? f[columnas.estado] : valor;
+      else f.splice(1, 0, valor);
+      return f;
+    });
+    const mover = (c) => (tieneCol || c < 1 ? c : c + 1);
+    if (columnas.naturaleza !== undefined && !String(salida[h][mover(columnas.naturaleza)] ?? '').trim()) salida[h][mover(columnas.naturaleza)] = 'XX';
+    const ws = XLSX.utils.aoa_to_sheet(salida, { cellDates: true, dateNF: 'dd-mm-yyyy' });
+    for (const k of ['debe', 'haber', 'saldo']) {
+      if (columnas[k] === undefined) continue;
+      for (let r = h + 1; r < salida.length; r++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c: mover(columnas[k]) })];
+        if (cell && cell.t === 'n') cell.z = '"$" #,##0';
+      }
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, state.hoja.trim().slice(0, 31) || 'IPE');
+    const base = state.libro.nombreArchivo.replace(/\.xls[xm]?$/i, '').replace(/[.\s]+$/, '');
+    XLSX.writeFile(wb, `${base} - con MIS APUNTES.xlsx`);
   }
 
   function rebuildMemoGroups() {
@@ -418,7 +492,11 @@
 
     $('filtro-alertas').addEventListener('change', renderAlertas);
     $('sel-hoja').addEventListener('change', (e) => {
-      try { cargarHoja(e.target.value); } catch (err) { $('estado-carga').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`; }
+      try { cargarHoja(e.target.value); } catch (err) { mostrarError(err); }
+    });
+    $('archivo-anterior').addEventListener('change', (e) => { copiarApuntes(e.target.files[0]); e.target.value = ''; });
+    $('btn-hoja-trabajo').addEventListener('click', () => {
+      try { descargarHojaTrabajo(); } catch (err) { mostrarError(err); }
     });
     $('cfg-iniciales').addEventListener('change', saveConfig);
     $('cfg-fecha').addEventListener('change', () => state.memoGroups.forEach((g, gi) => refreshGroup(gi)));

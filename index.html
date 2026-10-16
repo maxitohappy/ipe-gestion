@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261016">
+  <link rel="stylesheet" href="css/styles.css?v=20261016b">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
       <h1>Gestión IPE</h1>
-      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-16</span></p>
+      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-16b</span></p>
       <p class="sub offline-info">
         <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador).</span>
         <span id="modo-web"><a href="https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip">Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
@@ -28,8 +28,14 @@
       <p id="estado-carga" class="muted"></p>
       <p id="selector-hoja" hidden><label>Hoja del Excel: <select id="sel-hoja"></select></label></p>
       <div id="aviso-estado" class="notice" hidden>
-        Esta hoja no tiene la columna <b>MIS APUNTES</b> (donde se indica APLICAR, DEVOLVER, etc.), por lo que no se pueden preparar memos ni devoluciones.
-        Agrega esa columna con su encabezado en la hoja de trabajo y vuelve a cargar el archivo. El resumen y las alertas sí están disponibles.
+        <p>Esta hoja no tiene la columna <b>MIS APUNTES</b> (APLICAR, DEVOLVER, correo enviado…), por lo que todavía no se pueden preparar memos ni devoluciones. El resumen y las alertas sí están disponibles.</p>
+        <p>Puedes <b>copiar los MIS APUNTES del Excel del mes anterior</b>: los registros que ya existían toman su estado y los nuevos quedan sin estado.</p>
+        <label class="primary file-btn">Copiar MIS APUNTES desde el Excel del mes anterior<input type="file" id="archivo-anterior" accept=".xlsx,.xls,.xlsm" hidden></label>
+      </div>
+      <div id="info-copia" class="notice ok-notice" hidden>
+        <p id="info-copia-texto"></p>
+        <p>Para seguir trabajando en Excel, descarga la hoja con la columna MIS APUNTES ya incorporada (columna B), complétala y vuelve a cargarla aquí. Se descargan los datos sin el formato original.</p>
+        <button id="btn-hoja-trabajo" class="secondary">Descargar hoja de trabajo con MIS APUNTES (.xlsx)</button>
       </div>
     </section>
 
@@ -102,16 +108,16 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261016"></script>
-  <script src="vendor/pizzip.min.js?v=20261016"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261016"></script>
-  <script src="vendor/FileSaver.min.js?v=20261016"></script>
-  <script src="js/format.js?v=20261016"></script>
-  <script src="js/parser.js?v=20261016"></script>
-  <script src="js/memo.js?v=20261016"></script>
-  <script src="js/devoluciones.js?v=20261016"></script>
-  <script src="js/resumen.js?v=20261016"></script>
-  <script src="js/plantilla.js?v=20261016"></script>
-  <script src="js/app.js?v=20261016"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261016b"></script>
+  <script src="vendor/pizzip.min.js?v=20261016b"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261016b"></script>
+  <script src="vendor/FileSaver.min.js?v=20261016b"></script>
+  <script src="js/format.js?v=20261016b"></script>
+  <script src="js/parser.js?v=20261016b"></script>
+  <script src="js/memo.js?v=20261016b"></script>
+  <script src="js/devoluciones.js?v=20261016b"></script>
+  <script src="js/resumen.js?v=20261016b"></script>
+  <script src="js/plantilla.js?v=20261016b"></script>
+  <script src="js/app.js?v=20261016b"></script>
 </body>
 </html>

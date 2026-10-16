@@ -96,3 +96,7 @@ td.apls { min-width: 380px; }
 .version { display: inline-block; margin-left: 6px; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; }
 .offline-info { font-size: 13px; }
 .offline-info a { color: var(--accent); }
+.notice p { margin: 0 0 8px; }
+.notice p:last-child { margin-bottom: 0; }
+label.primary.file-btn { background: var(--accent); color: var(--accent-text); }
+.ok-notice { background: var(--surface); border-color: var(--ok); }

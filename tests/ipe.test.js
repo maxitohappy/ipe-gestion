@@ -193,3 +193,30 @@ test('elige la hoja de trabajo IPE entre varias hojas y tolera la falta de MIS A
 
   assert.equal(parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }]).elegida, null);
 });
+
+test('reconoce la columna ACREEDOR/DEUDOR aunque no tenga encabezado', () => {
+  const sinXX = AOA.map((r, i) => (i === 0 ? r.map((h) => (h === 'XX' ? '' : h)) : r));
+  const { rows, columnas } = parser.parseAoa(sinXX);
+  assert.equal(columnas.naturaleza, 17);
+  assert.equal(rows[1].naturaleza, 'DEUDOR');
+  assert.equal(rows[1].saldoNeto, -300);
+});
+
+test('copia MIS APUNTES del mes anterior: exacto, por documento y nuevos sin estado', () => {
+  const anterior = parser.parseAoa(AOA).rows;
+  // Mes nuevo sin MIS APUNTES: mismas filas, una con otro comprobante y una nueva
+  const nuevo = AOA.map((r) => r.slice(2));
+  nuevo[2] = [...nuevo[2]]; nuevo[2][9] = 999; // COMPROB. distinto en la fila NBCH 200
+  nuevo.push(row('', 88888888, 8, 'EMPRESA NUEVA', 'EFE', 700, '01-10-2026', 50, 'ACREEDOR').slice(2));
+  const actual = parser.parseAoa(nuevo);
+  assert.equal(actual.tieneEstado, false);
+  const res = parser.copiarEstados(actual.rows, anterior);
+  assert.equal(res.exactos, 6);
+  assert.equal(res.porDocumento, 1);
+  assert.equal(res.sinCoincidencia, 1);
+  assert.equal(res.rows[1].estado, 'APLICAR');
+  assert.equal(res.rows[0].categoria, 'APLICAR');
+  assert.equal(res.rows.at(-1).categoria, 'SIN ESTADO');
+  assert.equal(actual.rows[0].estado, ''); // no modifica la entrada
+  assert.equal(memo.buildGroups(res.rows).length, 2);
+});

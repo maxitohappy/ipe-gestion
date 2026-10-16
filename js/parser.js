@@ -77,13 +77,33 @@
   }
 
   /**
+   * Si la columna ACREEDOR/DEUDOR no tiene encabezado (en algunos meses viene sin "XX"),
+   * se reconoce por sus valores en las filas siguientes al encabezado.
+   */
+  function detectarNaturaleza(aoa, h, idx) {
+    if (idx.naturaleza !== undefined) return;
+    const usadas = new Set(Object.values(idx));
+    const muestra = aoa.slice(h + 1, h + 101);
+    const ancho = Math.max(0, ...muestra.map((r) => (r || []).length));
+    for (let c = 0; c < ancho; c++) {
+      if (usadas.has(c) || String((aoa[h] || [])[c] ?? '').trim()) continue;
+      const valores = muestra.map((r) => String((r || [])[c] ?? '').trim().toUpperCase()).filter(Boolean);
+      if (valores.length && valores.every((v) => v === 'ACREEDOR' || v === 'DEUDOR')) {
+        idx.naturaleza = c;
+        return;
+      }
+    }
+  }
+
+  /**
    * Evalúa si una hoja tiene la estructura IPE mirando solo sus primeras filas.
-   * Devuelve { valida, tieneEstado, faltan }.
+   * Devuelve { valida, tieneEstado, trabajo, faltan }.
    */
   function analizarHoja(aoaInicio) {
     const h = findHeaderRow(aoaInicio);
-    if (h < 0) return { valida: false, tieneEstado: false, faltan: ['RAZÓN SOCIAL', 'SALDO'] };
+    if (h < 0) return { valida: false, tieneEstado: false, trabajo: 0, faltan: ['RAZÓN SOCIAL', 'SALDO'] };
     const idx = mapColumns(aoaInicio[h]);
+    detectarNaturaleza(aoaInicio, h, idx);
     const faltan = REQUIRED.filter((k) => idx[k] === undefined).map((k) => NOMBRES[k]);
     // Columnas propias de la hoja de trabajo (no del mayor contable): sirven para desempatar.
     const trabajo = ['estado', 'responsable', 'justificacion', 'gestion', 'naturaleza', 'doctoAplicar', 'montoAplicar']
@@ -111,6 +131,7 @@
     const h = findHeaderRow(aoa);
     if (h < 0) throw new Error('No se encontró la fila de encabezados (debe contener "RAZÓN SOCIAL" y "SALDO").');
     const idx = mapColumns(aoa[h]);
+    detectarNaturaleza(aoa, h, idx);
     const missing = REQUIRED.filter((k) => idx[k] === undefined);
     if (missing.length) throw new Error(`Faltan columnas obligatorias en el Excel: ${missing.map((k) => NOMBRES[k]).join(', ')}`);
 
@@ -153,9 +174,34 @@
     }
     return {
       rows,
+      filaEncabezado: h,
+      columnas: idx,
       tieneEstado: idx.estado !== undefined,
       tieneColumnasAplicar: idx.doctoAplicar !== undefined && idx.montoAplicar !== undefined,
     };
+  }
+
+  /**
+   * Copia MIS APUNTES desde los registros de otro mes (normalmente el anterior).
+   * Coincidencia exacta por RUT + documento + número + comprobante; si no hay, por RUT + documento + número.
+   * Devuelve { rows, exactos, porDocumento, sinCoincidencia } sin modificar los registros de entrada.
+   */
+  function copiarEstados(destino, origen) {
+    const clave = (r) => `${r.rut}-${r.dv}|${r.doc}|${r.nro}|${r.comprob}`;
+    const claveDoc = (r) => `${r.rut}-${r.dv}|${r.doc}|${r.nro}`;
+    const conEstado = origen.filter((r) => r.estado);
+    const exacta = new Map(conEstado.map((r) => [clave(r), r]));
+    const porDoc = new Map(conEstado.map((r) => [claveDoc(r), r]));
+    let exactos = 0;
+    let porDocumento = 0;
+    const rows = destino.map((r) => {
+      let previo = exacta.get(clave(r));
+      if (previo) exactos++;
+      else if ((previo = porDoc.get(claveDoc(r)))) porDocumento++;
+      if (!previo) return { ...r, estadoCopiado: false };
+      return { ...r, estado: previo.estado, categoria: categoria(previo.estado), estadoCopiado: true };
+    });
+    return { rows, exactos, porDocumento, sinCoincidencia: rows.length - exactos - porDocumento };
   }
 
   /** Último paso numerado de "Gestión realizada" (ej. "19) Correo enviado..."). */
@@ -166,5 +212,5 @@
     return partes[partes.length - 1].replace(/^\d{1,2}\s?\)\s?/, '');
   }
 
-  return { parseAoa, analizarHoja, elegirHoja, categoria, ultimaGestion, COLUMNS };
+  return { parseAoa, analizarHoja, elegirHoja, copiarEstados, categoria, ultimaGestion, COLUMNS };
 });

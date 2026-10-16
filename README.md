@@ -33,7 +33,16 @@ Si GitHub o internet no están disponibles, la app funciona igual desde el compu
 
 El historial de memos se guarda por separado en cada modo (en línea y sin internet). Para pasarlo de uno a otro usa **Historial → Descargar respaldo** y luego **Importar respaldo**.
 
-El estado se lee de la columna *MIS APUNTES* (no importa mayúsculas ni espacios). Las columnas se reconocen por su nombre, así que el orden y el nombre de la hoja pueden cambiar de un mes a otro.
+## Excel de un mes nuevo (sin MIS APUNTES)
+
+El Excel de cada mes puede traer varias hojas (por ejemplo, el mayor contable y la hoja de trabajo). La app revisa todas y usa la hoja de trabajo IPE; si hay más de una, se puede cambiar con el selector **Hoja del Excel**.
+
+Si la hoja todavía no tiene la columna *MIS APUNTES*:
+
+1. Presiona **Copiar MIS APUNTES desde el Excel del mes anterior** y elige el Excel del mes pasado. Los registros que ya existían toman su estado (coincidencia por RUT + documento + número + comprobante, o por documento si cambió el comprobante); los nuevos quedan *SIN ESTADO*.
+2. Opcional: **Descargar hoja de trabajo con MIS APUNTES** para completar los estados nuevos en Excel y volver a cargarla.
+
+El estado se lee de la columna *MIS APUNTES* (también acepta *APUNTES* o *ESTADO*; no importan mayúsculas ni espacios). Las columnas se reconocen por su nombre, así que el orden y el nombre de la hoja pueden cambiar de un mes a otro. La columna ACREEDOR/DEUDOR se reconoce aunque venga sin el encabezado *XX*.
 
 ## Desarrollo
 

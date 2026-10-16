@@ -46,7 +46,7 @@
       if ((r.categoria === 'APLICAR' || r.categoria === 'DEVOLVER') && !r.justificacion)
         add(r, 'Datos', 'Sin justificación del ingreso anticipado');
       if (tieneEstado && (r.categoria === 'OTRO' || r.categoria === 'SIN ESTADO'))
-        add(r, 'Estado', `Estado no estándar en MIS APUNTES: "${r.estado || '(vacío)'}"`);
+        add(r, 'Estado', r.estado ? `Estado no estándar en MIS APUNTES: "${r.estado}"` : 'Sin estado en MIS APUNTES (registro nuevo o sin clasificar)');
       if (!r.gestion) add(r, 'Gestión', 'Sin gestiones registradas');
       if (r.categoria === 'CORREO ENVIADO') {
         const f = fmt.parseFecha(r.estado);
