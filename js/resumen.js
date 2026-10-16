@@ -14,7 +14,7 @@
   ];
   const DIAS_REITERAR = 30;
 
-  function compute(rows, hoy, tieneColumnasAplicar) {
+  function compute(rows, hoy, tieneColumnasAplicar, tieneEstado = true) {
     const porEstado = new Map();
     for (const r of rows) {
       const e = porEstado.get(r.categoria) || { categoria: r.categoria, cantidad: 0, monto: 0 };
@@ -45,7 +45,7 @@
         add(r, 'Memo', 'APLICAR sin "Docto a aplicar" o "Monto a aplicar"');
       if ((r.categoria === 'APLICAR' || r.categoria === 'DEVOLVER') && !r.justificacion)
         add(r, 'Datos', 'Sin justificación del ingreso anticipado');
-      if (r.categoria === 'OTRO' || r.categoria === 'SIN ESTADO')
+      if (tieneEstado && (r.categoria === 'OTRO' || r.categoria === 'SIN ESTADO'))
         add(r, 'Estado', `Estado no estándar en MIS APUNTES: "${r.estado || '(vacío)'}"`);
       if (!r.gestion) add(r, 'Gestión', 'Sin gestiones registradas');
       if (r.categoria === 'CORREO ENVIADO') {

@@ -44,27 +44,61 @@
   // ---------- carga ----------
   async function handleFile(file) {
     if (!file) return;
-    $('estado-carga').textContent = 'Leyendo…';
+    $('estado-carga').textContent = 'Leyendo el Excel… (los libros con muchas hojas pueden tardar unos segundos)';
+    // Deja que el navegador muestre el mensaje antes de la lectura, que bloquea la página mientras dura.
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { cellDates: true });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-      const parsed = parser.parseAoa(aoa);
-      state.rows = parsed.rows;
-      state.tieneColumnasAplicar = parsed.tieneColumnasAplicar;
-      state.devGroups = devoluciones.buildGroups(state.rows);
-      rebuildMemoGroups();
-      $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(file.name)} — hoja "${esc(wb.SheetNames[0])}", ${state.rows.length} registros.`;
-      $('contenido').hidden = false;
-      renderResumen();
-      renderMemos();
-      renderDevoluciones();
-      renderHistorial();
+      // 1) Lectura rápida: solo las primeras 30 filas de cada hoja, para encontrar la hoja de trabajo IPE.
+      const cabeceras = XLSX.read(buf, { cellDates: true, sheetRows: 30 });
+      const hojas = cabeceras.SheetNames.map((nombre) => ({
+        nombre,
+        inicio: XLSX.utils.sheet_to_json(cabeceras.Sheets[nombre], { header: 1, raw: true, defval: '' }),
+      }));
+      const { elegida, candidatas, evaluadas } = parser.elegirHoja(hojas);
+      if (!elegida) {
+        const detalle = evaluadas.map((h) => `"${h.nombre}" (faltan: ${h.faltan.join(', ')})`).join('; ');
+        throw new Error(`Ninguna hoja del Excel tiene la estructura IPE. Hojas revisadas: ${detalle}.`);
+      }
+      state.buf = buf;
+      state.hojaCache = {};
+      state.nombreArchivo = file.name;
+      state.candidatas = candidatas;
+      cargarHoja(elegida.nombre);
     } catch (err) {
       console.error(err);
+      $('selector-hoja').hidden = true;
+      $('aviso-estado').hidden = true;
       $('estado-carga').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
     }
+  }
+
+  function cargarHoja(nombre) {
+    // 2) Lectura completa solo de la hoja elegida (los libros pueden traer hojas con más de un millón de filas).
+    if (!state.hojaCache[nombre]) {
+      const wb = XLSX.read(state.buf, { cellDates: true, dense: true, sheets: nombre });
+      state.hojaCache[nombre] = XLSX.utils.sheet_to_json(wb.Sheets[nombre], { header: 1, raw: true, defval: '', blankrows: false });
+    }
+    const aoa = state.hojaCache[nombre];
+    const parsed = parser.parseAoa(aoa);
+    state.rows = parsed.rows;
+    state.tieneEstado = parsed.tieneEstado;
+    state.tieneColumnasAplicar = parsed.tieneColumnasAplicar;
+    state.devGroups = devoluciones.buildGroups(state.rows);
+    rebuildMemoGroups();
+
+    $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(state.nombreArchivo)} — hoja "${esc(nombre)}", ${state.rows.length} registros.`;
+    const sel = $('sel-hoja');
+    sel.innerHTML = state.candidatas.map((h) =>
+      `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MIS APUNTES)'}</option>`).join('');
+    $('selector-hoja').hidden = state.candidatas.length < 2;
+    $('aviso-estado').hidden = parsed.tieneEstado;
+
+    $('contenido').hidden = false;
+    renderResumen();
+    renderMemos();
+    renderDevoluciones();
+    renderHistorial();
   }
 
   function rebuildMemoGroups() {
@@ -75,7 +109,7 @@
 
   // ---------- resumen ----------
   function renderResumen() {
-    const r = resumen.compute(state.rows, new Date(), state.tieneColumnasAplicar);
+    const r = resumen.compute(state.rows, new Date(), state.tieneColumnasAplicar, state.tieneEstado);
     const cat = (c) => r.porEstado.find((e) => e.categoria === c) || { cantidad: 0, monto: 0 };
     const kpis = [
       ['Saldo neto IPE', clp(r.total)],
@@ -383,6 +417,9 @@
     }));
 
     $('filtro-alertas').addEventListener('change', renderAlertas);
+    $('sel-hoja').addEventListener('change', (e) => {
+      try { cargarHoja(e.target.value); } catch (err) { $('estado-carga').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`; }
+    });
     $('cfg-iniciales').addEventListener('change', saveConfig);
     $('cfg-fecha').addEventListener('change', () => state.memoGroups.forEach((g, gi) => refreshGroup(gi)));
 

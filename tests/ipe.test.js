@@ -172,3 +172,24 @@ test('js/plantilla.js corresponde a templates/memo_template.docx (ejecutar scrip
   const docx = fs.readFileSync(path.join(__dirname, '../templates/memo_template.docx'));
   assert.ok(Buffer.from(b64, 'base64').equals(docx));
 });
+
+test('elige la hoja de trabajo IPE entre varias hojas y tolera la falta de MIS APUNTES', () => {
+  const mayor = [['', 'MAYOR AUXILIAR - RUT'], [], ['CENTRO FINANCIERO', '', 'X']];
+  const sinEstado = AOA.map((r) => r.slice(2)); // sin columnas vacía y MIS APUNTES
+  const conEstado = AOA;
+  let r = parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }, { nombre: 'Sin', inicio: sinEstado }, { nombre: 'Trabajo', inicio: conEstado }]);
+  assert.equal(r.elegida.nombre, 'Trabajo');
+  assert.deepEqual(r.candidatas.map((h) => h.nombre), ['Trabajo', 'Sin']);
+  assert.match(r.evaluadas[0].faltan.join(), /RAZÓN SOCIAL/);
+
+  r = parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }, { nombre: 'Sin', inicio: sinEstado }]);
+  assert.equal(r.elegida.nombre, 'Sin');
+  const parsed = parser.parseAoa(sinEstado);
+  assert.equal(parsed.tieneEstado, false);
+  assert.equal(parsed.rows.length, 7);
+  assert.equal(memo.buildGroups(parsed.rows).length, 0);
+  const res = resumen.compute(parsed.rows, new Date(2026, 9, 14), false, false);
+  assert.ok(!res.alertas.some((a) => a.tipo === 'Estado'));
+
+  assert.equal(parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }]).elegida, null);
+});

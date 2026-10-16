@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261015">
+  <link rel="stylesheet" href="css/styles.css?v=20261016">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
       <h1>Gestión IPE</h1>
-      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-15</span></p>
+      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-16</span></p>
       <p class="sub offline-info">
         <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador).</span>
         <span id="modo-web"><a href="https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip">Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
@@ -26,6 +26,11 @@
       </label>
       <input type="file" id="archivo" accept=".xlsx,.xls,.xlsm">
       <p id="estado-carga" class="muted"></p>
+      <p id="selector-hoja" hidden><label>Hoja del Excel: <select id="sel-hoja"></select></label></p>
+      <div id="aviso-estado" class="notice" hidden>
+        Esta hoja no tiene la columna <b>MIS APUNTES</b> (donde se indica APLICAR, DEVOLVER, etc.), por lo que no se pueden preparar memos ni devoluciones.
+        Agrega esa columna con su encabezado en la hoja de trabajo y vuelve a cargar el archivo. El resumen y las alertas sí están disponibles.
+      </div>
     </section>
 
     <section id="contenido" hidden>
@@ -97,16 +102,16 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261015"></script>
-  <script src="vendor/pizzip.min.js?v=20261015"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261015"></script>
-  <script src="vendor/FileSaver.min.js?v=20261015"></script>
-  <script src="js/format.js?v=20261015"></script>
-  <script src="js/parser.js?v=20261015"></script>
-  <script src="js/memo.js?v=20261015"></script>
-  <script src="js/devoluciones.js?v=20261015"></script>
-  <script src="js/resumen.js?v=20261015"></script>
-  <script src="js/plantilla.js?v=20261015"></script>
-  <script src="js/app.js?v=20261015"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261016"></script>
+  <script src="vendor/pizzip.min.js?v=20261016"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261016"></script>
+  <script src="vendor/FileSaver.min.js?v=20261016"></script>
+  <script src="js/format.js?v=20261016"></script>
+  <script src="js/parser.js?v=20261016"></script>
+  <script src="js/memo.js?v=20261016"></script>
+  <script src="js/devoluciones.js?v=20261016"></script>
+  <script src="js/resumen.js?v=20261016"></script>
+  <script src="js/plantilla.js?v=20261016"></script>
+  <script src="js/app.js?v=20261016"></script>
 </body>
 </html>
