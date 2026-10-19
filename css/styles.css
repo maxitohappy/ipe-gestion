@@ -112,7 +112,9 @@ label.primary.file-btn { background: var(--accent); color: var(--accent-text); }
 
 .nowrap { white-space: nowrap; }
 mark { background: #fff59d; color: #1d2330; padding: 0 2px; border-radius: 2px; }
-.simbologia { margin: 0 0 8px; }
+/* Simbología separada del detalle por una línea divisoria */
+.leyenda { padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.simbologia { margin: 0 0 12px; }
 .banco textarea { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; resize: vertical; }
 input.numero { width: 80px; }
 input.monto { width: 110px; }

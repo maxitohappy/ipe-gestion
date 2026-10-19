@@ -233,9 +233,14 @@
   const netoHtml = (r) => (r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : '');
 
   /** Buscador por RUT o empresa: oculta las tarjetas que no coinciden. */
-  function filtrarTarjetas(contenedor, grupos, q) {
+  function filtrarTarjetas(contenedor, grupos, q, campo) {
     const t = q.trim().toLowerCase();
     const digitos = t.replace(/[^0-9k]/g, '');
+    const lista = $(contenedor);
+    // Al ocultar tarjetas la página se acorta y el navegador sube la vista. Se mantiene un alto mínimo
+    // mientras hay búsqueda y se conserva la posición del buscador en pantalla.
+    const antes = campo ? campo.getBoundingClientRect().top : null;
+    lista.style.minHeight = t ? `${window.innerHeight}px` : '';
     let visibles = 0;
     document.querySelectorAll(`#${contenedor} [data-g]`).forEach((card) => {
       const g = state[grupos][Number(card.dataset.g)];
@@ -244,6 +249,7 @@
       card.hidden = !ok;
       if (ok) visibles += 1;
     });
+    if (campo) window.scrollBy(0, campo.getBoundingClientRect().top - antes);
     return visibles;
   }
 
@@ -647,8 +653,8 @@
       state.devGroups.forEach((g, gi) => refreshDev(gi));
     });
     $('filtro-bandera').addEventListener('change', renderListado);
-    $('buscar-memos').addEventListener('input', (e) => filtrarTarjetas('memos', 'memoGroups', e.target.value));
-    $('buscar-dev').addEventListener('input', (e) => filtrarTarjetas('devoluciones', 'devGroups', e.target.value));
+    $('buscar-memos').addEventListener('input', (e) => filtrarTarjetas('memos', 'memoGroups', e.target.value, e.target));
+    $('buscar-dev').addEventListener('input', (e) => filtrarTarjetas('devoluciones', 'devGroups', e.target.value, e.target));
     $('buscar').addEventListener('input', renderListado);
 
     eventosTarjetas('memos', 'memoGroups', refreshMemo, {
