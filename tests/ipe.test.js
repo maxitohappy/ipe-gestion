@@ -110,7 +110,8 @@ test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que d
   uno.rows[0].aplicaciones = [{ docto: 'Pagar FEE 2', monto: 10 }];
   const data2 = memo.memoData(uno, { fecha: new Date(2026, 9, 20) });
   const texto2 = data2.motivos[0].justificacion.map((p) => p.t).join('');
-  assert.match(texto2, /Asimismo, con fecha 14\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha 14\.OCT\.2026\.$/);
+  assert.match(texto2, /Asimismo, con fecha \[día\]\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha \[día\]\.OCT\.2026\.$/);
+  assert.equal(data2.motivos[0].justificacion.filter((p) => p.t === '[día]').length, 2);
   historial[0].numero = '';
   const sinNumero = memo.memoData(memo.buildGroups(rows, movimientos.indice(historial, [])).find((g) => g.razon === 'EMPRESA UNO SPA'), { fecha: HOY });
   assert.ok(sinNumero.motivos[0].justificacion.some((p) => p.m && p.t === '[N° memo]'));
