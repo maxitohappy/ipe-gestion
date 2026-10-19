@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261016b">
+  <link rel="stylesheet" href="css/styles.css?v=20261019">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
       <h1>Gestión IPE</h1>
-      <p class="sub">Ingresos percibidos en exceso — memos de aplicación, devoluciones y alertas. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-16b</span></p>
+      <p class="sub">Ingresos percibidos en exceso — memos de aplicación y devoluciones. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-19</span></p>
       <p class="sub offline-info">
         <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador).</span>
         <span id="modo-web"><a href="https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip">Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
@@ -28,54 +28,56 @@
       <p id="estado-carga" class="muted"></p>
       <p id="selector-hoja" hidden><label>Hoja del Excel: <select id="sel-hoja"></select></label></p>
       <div id="aviso-estado" class="notice" hidden>
-        <p>Esta hoja no tiene la columna <b>MIS APUNTES</b> (APLICAR, DEVOLVER, correo enviado…), por lo que todavía no se pueden preparar memos ni devoluciones. El resumen y las alertas sí están disponibles.</p>
-        <p>Puedes <b>copiar los MIS APUNTES del Excel del mes anterior</b>: los registros que ya existían toman su estado y los nuevos quedan sin estado.</p>
-        <label class="primary file-btn">Copiar MIS APUNTES desde el Excel del mes anterior<input type="file" id="archivo-anterior" accept=".xlsx,.xls,.xlsm" hidden></label>
+        <p>Esta hoja no tiene la columna <b>MI GESTION</b> (APLICAR, DEVOLVER, correo enviado…), por lo que todavía no se pueden preparar memos ni devoluciones.</p>
+        <p>Puedes <b>copiar MI GESTION y TIPO DE IPE desde el Excel del mes anterior</b>: los registros que ya existían toman sus datos y los nuevos quedan sin estado.</p>
+        <label class="primary file-btn">Copiar desde el Excel del mes anterior<input type="file" id="archivo-anterior" accept=".xlsx,.xls,.xlsm" hidden></label>
       </div>
       <div id="info-copia" class="notice ok-notice" hidden>
         <p id="info-copia-texto"></p>
-        <p>Para seguir trabajando en Excel, descarga la hoja con la columna MIS APUNTES ya incorporada (columna B), complétala y vuelve a cargarla aquí. Se descargan los datos sin el formato original.</p>
-        <button id="btn-hoja-trabajo" class="secondary">Descargar hoja de trabajo con MIS APUNTES (.xlsx)</button>
+        <p>Para seguir trabajando en Excel, descarga la hoja con las columnas TIPO DE IPE y MI GESTION ya incorporadas (columnas B y C), complétala y vuelve a cargarla aquí. Se descargan los datos sin el formato original.</p>
+        <button id="btn-hoja-trabajo" class="secondary">Descargar hoja de trabajo (.xlsx)</button>
       </div>
     </section>
 
     <section id="contenido" hidden>
+      <div class="card config">
+        <h2>Datos de los documentos</h2>
+        <div class="form">
+          <label>Fecha (en el Word va solo mes y año)<input type="date" id="cfg-fecha"></label>
+          <label>Iniciales<input type="text" id="cfg-iniciales" placeholder="ERS/yaa"></label>
+        </div>
+      </div>
+
       <nav class="tabs" role="tablist">
         <button role="tab" data-tab="resumen" aria-selected="true">Resumen y alertas</button>
         <button role="tab" data-tab="memos" aria-selected="false">Memos (APLICAR) <span id="n-memos" class="badge"></span></button>
         <button role="tab" data-tab="devoluciones" aria-selected="false">Devoluciones <span id="n-dev" class="badge"></span></button>
         <button role="tab" data-tab="historial" aria-selected="false">Historial de memos <span id="n-hist" class="badge"></span></button>
+        <button role="tab" data-tab="historial-dev" aria-selected="false">Historial de devoluciones <span id="n-hist-dev" class="badge"></span></button>
       </nav>
 
       <div id="tab-resumen" class="tab">
         <div id="kpis" class="kpis"></div>
-        <div class="grid2">
-          <div class="card"><h2>Por estado (MIS APUNTES)</h2><div id="por-estado"></div></div>
-          <div class="card"><h2>Antigüedad</h2><div id="antiguedad"></div></div>
-        </div>
         <div class="card">
           <div class="row-between">
-            <h2>Alertas <span id="n-alertas" class="badge"></span></h2>
-            <select id="filtro-alertas" aria-label="Filtrar alertas"></select>
+            <h2>Ingresos anticipados</h2>
+            <div class="actions">
+              <select id="filtro-bandera" aria-label="Filtrar por bandera">
+                <option value="">Todas las banderas</option>
+                <option value="roja">Rojas (años anteriores)</option>
+                <option value="amarilla">Amarillas (1er semestre)</option>
+                <option value="verde">Verdes (2º semestre)</option>
+              </select>
+              <input type="search" id="buscar" placeholder="Buscar empresa, RUT o documento" aria-label="Buscar">
+            </div>
           </div>
-          <div id="alertas" class="scroll"></div>
+          <p class="muted leyenda"><span class="flag roja"></span> año anterior · <span class="flag amarilla"></span> 1er semestre del año en curso · <span class="flag verde"></span> 2º semestre del año en curso</p>
+          <div id="listado" class="scroll"></div>
         </div>
       </div>
 
       <div id="tab-memos" class="tab" hidden>
-        <div class="card config">
-          <h2>Datos del memo</h2>
-          <div class="form">
-            <label>Fecha<input type="date" id="cfg-fecha"></label>
-            <label>Iniciales<input type="text" id="cfg-iniciales" placeholder="ERS/yaa"></label>
-          </div>
-          <p class="muted">El Nº de memo queda en blanco para completarlo en Word. Firma: ELIANA ROJAS SILVA, Encargada Sección Gestión de Ingresos.</p>
-        </div>
-        <div id="aviso-columnas" class="notice" hidden>
-          El Excel no tiene las columnas <b>DOCTO A APLICAR</b> y <b>MONTO A APLICAR</b>. Agrégalas al final de la hoja para que el memo salga completo, o complétalas aquí abajo antes de descargar.
-        </div>
-        <p class="muted">Cada ingreso anticipado puede aplicarse a varios documentos con <b>+ Agregar documento</b>: el saldo se descuenta en cada aplicación y, si queda diferencia, el memo incluye la Nota correspondiente. Al descargar un memo, sus documentos pasan al <b>Historial</b> y dejan de aparecer aquí.</p>
-        <p id="ocultos-hist" class="muted"></p>
+        <p class="muted">Elige el <b>TIPO DE IPE</b> para redactar el MOTIVO y completa los datos marcados como <b>&lt;completar por el usuario&gt;</b>. Cada ingreso anticipado puede aplicarse a varios documentos con <b>+ Agregar documento</b>. Al descargar el memo, lo aplicado pasa al <b>Historial de memos</b> y el saldo que no se aplicó sigue pendiente aquí. El Nº de memo queda en blanco en el Word; anótalo luego en el historial.</p>
         <div class="row-between">
           <p class="muted" id="memos-resumen"></p>
           <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
@@ -84,40 +86,58 @@
       </div>
 
       <div id="tab-devoluciones" class="tab" hidden>
+        <p class="muted">Elige el <b>TIPO DE IPE</b> para redactar las OBSERVACIONES, indica el monto a devolver y completa la REF. y los datos bancarios. Al descargar el oficio, lo devuelto pasa al <b>Historial de devoluciones</b> y el saldo restante sigue pendiente aquí.</p>
         <div class="row-between">
           <p class="muted" id="dev-resumen"></p>
-          <button id="btn-dev" class="primary">Descargar planilla de devoluciones (.xlsx)</button>
+          <button id="btn-zip-dev" class="primary">Descargar todas las devoluciones (.zip)</button>
         </div>
-        <div class="card"><div id="devoluciones" class="scroll"></div></div>
+        <div id="devoluciones"></div>
       </div>
 
       <div id="tab-historial" class="tab" hidden>
         <div class="notice">
-          El historial se guarda en <b>este navegador</b>. Descarga un respaldo periódicamente (y para usarlo en otro computador, impórtalo allá).
+          Los historiales se guardan en <b>este navegador</b>. Descarga un respaldo periódicamente (incluye memos y devoluciones) y, para usarlo en otro computador, impórtalo allá.
         </div>
         <div class="row-between">
           <p class="muted" id="hist-resumen"></p>
           <div class="actions">
             <button id="btn-hist-xlsx" class="secondary">Exportar a Excel</button>
-            <button id="btn-hist-backup" class="secondary">Descargar respaldo</button>
-            <label class="secondary file-btn">Importar respaldo<input type="file" id="hist-import" accept=".json" hidden></label>
+            <button class="secondary" data-backup>Descargar respaldo</button>
+            <label class="secondary file-btn">Importar respaldo<input type="file" data-import accept=".json" hidden></label>
           </div>
         </div>
         <div class="card"><div id="historial" class="scroll"></div></div>
       </div>
+
+      <div id="tab-historial-dev" class="tab" hidden>
+        <div class="notice">
+          Los historiales se guardan en <b>este navegador</b>. Descarga un respaldo periódicamente (incluye memos y devoluciones) y, para usarlo en otro computador, impórtalo allá.
+        </div>
+        <div class="row-between">
+          <p class="muted" id="hist-dev-resumen"></p>
+          <div class="actions">
+            <button id="btn-hist-dev-xlsx" class="secondary">Exportar a Excel</button>
+            <button class="secondary" data-backup>Descargar respaldo</button>
+            <label class="secondary file-btn">Importar respaldo<input type="file" data-import accept=".json" hidden></label>
+          </div>
+        </div>
+        <div class="card"><div id="historial-dev" class="scroll"></div></div>
+      </div>
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261016b"></script>
-  <script src="vendor/pizzip.min.js?v=20261016b"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261016b"></script>
-  <script src="vendor/FileSaver.min.js?v=20261016b"></script>
-  <script src="js/format.js?v=20261016b"></script>
-  <script src="js/parser.js?v=20261016b"></script>
-  <script src="js/memo.js?v=20261016b"></script>
-  <script src="js/devoluciones.js?v=20261016b"></script>
-  <script src="js/resumen.js?v=20261016b"></script>
-  <script src="js/plantilla.js?v=20261016b"></script>
-  <script src="js/app.js?v=20261016b"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261019"></script>
+  <script src="vendor/pizzip.min.js?v=20261019"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261019"></script>
+  <script src="vendor/FileSaver.min.js?v=20261019"></script>
+  <script src="js/format.js?v=20261019"></script>
+  <script src="js/glosas.js?v=20261019"></script>
+  <script src="js/movimientos.js?v=20261019"></script>
+  <script src="js/parser.js?v=20261019"></script>
+  <script src="js/memo.js?v=20261019"></script>
+  <script src="js/devoluciones.js?v=20261019"></script>
+  <script src="js/resumen.js?v=20261019"></script>
+  <script src="js/plantilla.js?v=20261019"></script>
+  <script src="js/app.js?v=20261019"></script>
 </body>
 </html>

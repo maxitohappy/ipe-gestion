@@ -1,22 +1,25 @@
-"""Incrusta templates/memo_template.docx en js/plantilla.js (base64).
+"""Incrusta las plantillas Word en js/plantilla.js (base64).
 
-Así la app no necesita descargar la plantilla y funciona también abriendo index.html
+Así la app no necesita descargar las plantillas y funciona también abriendo index.html
 directamente desde el computador, sin internet (los navegadores bloquean fetch en file://).
 
-Ejecutar cada vez que cambie la plantilla:
+Ejecutar cada vez que cambie una plantilla:
     python scripts/embed_template.py
 """
 import base64
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / 'templates' / 'memo_template.docx'
+PLANTILLAS = {
+    'plantillaB64': ROOT / 'templates' / 'memo_template.docx',
+    'plantillaDevolucionB64': ROOT / 'templates' / 'devolucion_template.docx',
+}
 DST = ROOT / 'js' / 'plantilla.js'
 
-b64 = base64.b64encode(SRC.read_bytes()).decode('ascii')
-DST.write_text(
-    '// Generado por scripts/embed_template.py a partir de templates/memo_template.docx. No editar a mano.\n'
-    f'(self.IPE = self.IPE || {{}}).plantillaB64 = "{b64}";\n',
-    encoding='utf-8',
-)
-print(f'{DST.relative_to(ROOT)}: {len(b64)} caracteres')
+lineas = ['// Generado por scripts/embed_template.py a partir de templates/*.docx. No editar a mano.',
+          'self.IPE = self.IPE || {};']
+for nombre, ruta in PLANTILLAS.items():
+    b64 = base64.b64encode(ruta.read_bytes()).decode('ascii')
+    lineas.append(f'self.IPE.{nombre} = "{b64}";')
+    print(f'{ruta.name}: {len(b64)} caracteres')
+DST.write_text('\n'.join(lineas) + '\n', encoding='utf-8')

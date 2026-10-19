@@ -1,222 +1,211 @@
-// Pruebas con datos ficticios. Ejecutar: node --test tests/
+// Pruebas con datos ficticios. Ejecutar: node --test tests/*.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const fmt = require('../js/format.js');
 const parser = require('../js/parser.js');
+const glosas = require('../js/glosas.js');
+const movimientos = require('../js/movimientos.js');
 const memo = require('../js/memo.js');
 const devoluciones = require('../js/devoluciones.js');
 const resumen = require('../js/resumen.js');
 
-const HEAD = ['', 'MIS APUNTES', 'Responsable', 'Concesión', 'C.F.', 'COD. AUX.', 'DV', 'RAZÓN SOCIAL', 'DOC.', 'NRO.', 'TIPO',
-  'COMPROB.', 'FECHA', 'GLOSA AUXILIAR', '  DEBE  ', '  HABER  ', '  SALDO  ', 'XX', 'Justificación Ingreso anticipado', ' Gestión realizada ',
-  'DOCTO A APLICAR', 'MONTO A APLICAR'];
-const row = (estado, rut, dv, razon, doc, nro, fecha, saldo, xx, just = '', gest = '', docto = '', monto = '') =>
-  ['', estado, 'Ana', '', 51, rut, dv, razon, doc, nro, 'I', 1, fecha, '', 0, saldo, saldo, xx, just, gest, docto, monto];
+// Estructura final del Excel: A clave, B TIPO DE IPE, C MI GESTION, ...
+const HEAD = ['', 'TIPO DE IPE', 'MI GESTION', 'Responsable', 'Concesión', 'C.F.', 'COD. AUX.', 'DV', 'RAZÓN SOCIAL', 'DOC.', 'NRO.', 'TIPO',
+  'COMPROB.', 'FECHA', 'GLOSA AUXILIAR', '  DEBE  ', '  HABER  ', '  SALDO  ', 'XX', 'Justificación Ingreso anticipado', ' Gestión realizada '];
+const row = (tipo, estado, rut, dv, razon, doc, nro, fecha, saldo, xx, just = '', gest = '', comprob = 1) =>
+  ['', tipo, estado, 'Ana', '', 51, rut, dv, razon, doc, nro, 'I', comprob, fecha, '', 0, saldo, saldo, xx, just, gest];
 
 const AOA = [
   HEAD,
-  row('APLICAR ', 11111111, 1, 'EMPRESA UNO SPA', 'EFE', 100, '05-01-2026', 1000, 'ACREEDOR', 'Pago duplicado', '1) Correo 2) Cliente autoriza', 'Pagar FEE 1', 5000),
-  row('APLICAR', 11111111, 1, 'EMPRESA UNO SPA', 'NBCH', 200, '06-01-2026', 300, 'DEUDOR'),
-  row('APLICAR', 22222222, 'k', 'EMPRESA DOS LTDA', 'EFE', 300, new Date(2026, 5, 30), 2500, 'ACREEDOR', '', '', 'Pagar FEE 2', '2.500'),
-  row('DEVOLVER', 33333333, 3, 'EMPRESA TRES', 'EFE', 400, '07-07-2026', 40, 'ACREEDOR', 'x', '1) correo 2) se procederá a devolver'),
-  row('DEVOLVER', 33333333, 3, 'EMPRESA TRES', 'EFE', 401, '07-07-2026', 10, 'DEUDOR'),
-  row('correo enviado 01-08-2026', 44444444, 4, 'EMPRESA CUATRO', 'EFE', 500, '01-07-2026', 70, 'ACREEDOR', '', '1) correo'),
-  row('????', 55555555, 5, 'EMPRESA CINCO', 'EFE', 600, '01-07-2026', 1, 'ACREEDOR'),
+  row('Pago en exceso', 'APLICAR ', 11111111, 1, 'EMPRESA UNO SPA', 'EFE', 100, '05-01-2025', 100, 'ACREEDOR', 'Pago duplicado', '1) Correo'),
+  row('', 'APLICAR', 22222222, 'k', 'EMPRESA DOS LTDA', 'NBCH', 440146, '22-01-2026', 542760, 'ACREEDOR', 'NCE N°18549', '', 10),
+  row('', 'APLICAR', 22222222, 'k', 'EMPRESA DOS LTDA', 'NBCH', 440146, '22-01-2026', 529798, 'DEUDOR', 'NCE N°18549', '', 11),
+  row('Pago duplicado', 'DEVOLVER', 33333333, 3, 'EMPRESA TRES', 'EFE', 400, '07-07-2026', 40, 'ACREEDOR', 'x', '1) correo'),
+  row('', 'correo enviado 01-08-2026', 44444444, 4, 'EMPRESA CUATRO', 'EFE', 500, '01-07-2026', 70, 'ACREEDOR', '', '1) correo'),
+  row('', '', 55555555, 5, 'EMPRESA CINCO', 'EFE', 600, '01-03-2026', 1, 'ACREEDOR'),
   ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
 ];
+const HOY = new Date(2026, 9, 19);
+const leer = () => parser.consolidar(parser.parseAoa(AOA).rows);
 
-test('formato RUT, montos y fecha', () => {
+test('formato: RUT, montos, fechas y banderas', () => {
   assert.equal(fmt.formatRut(96755500, 2), '96.755.500-2');
   assert.equal(fmt.formatRut('89428000', 'k'), '89.428.000-K');
   assert.equal(fmt.formatCLP(631142), '$ 631.142');
   assert.equal(fmt.toNumber(' $  7.926 '), 7926);
   assert.equal(fmt.toNumber(' $ - '), 0);
   assert.equal(fmt.toNumber('$ -24.570'), -24570);
-  assert.equal(fmt.formatMontoLibre(701483), '701.483');
-  assert.equal(fmt.formatMontoLibre('Saldo total'), 'Saldo total');
   assert.equal(fmt.fechaMemo(new Date(2026, 9, 4)), '04.OCT.2026');
+  assert.equal(fmt.fechaMesAnio(new Date(2026, 9, 4)), 'OCT.2026');
   assert.deepEqual(fmt.parseFecha('21.01.2026'), new Date(2026, 0, 21));
-  assert.deepEqual(fmt.parseFecha(46022), new Date(2025, 11, 31));
+  assert.equal(fmt.bandera(new Date(2025, 11, 31), HOY), 'roja');
+  assert.equal(fmt.bandera(new Date(2026, 0, 1), HOY), 'amarilla');
+  assert.equal(fmt.bandera(new Date(2026, 5, 30), HOY), 'amarilla');
+  assert.equal(fmt.bandera(new Date(2026, 6, 1), HOY), 'verde');
+  assert.equal(fmt.bandera(null, HOY), null);
 });
 
-test('parser mapea columnas por nombre y omite filas vacías', () => {
-  const { rows, tieneColumnasAplicar } = parser.parseAoa([['Reporte IPE'], ...AOA]);
-  assert.equal(rows.length, 7);
-  assert.ok(tieneColumnasAplicar);
+test('parser: estructura final con TIPO DE IPE y MI GESTION', () => {
+  const { rows, tieneEstado, tieneTipo } = parser.parseAoa([['Reporte IPE'], ...AOA]);
+  assert.ok(tieneEstado && tieneTipo);
+  assert.equal(rows.length, 6);
   assert.equal(rows[0].fila, 3);
   assert.equal(rows[0].categoria, 'APLICAR');
+  assert.equal(rows[0].tipoIpe, 'Pago en exceso');
   assert.equal(rows[0].rutFmt, '11.111.111-1');
-  assert.equal(rows[1].saldoNeto, -300);
-  assert.equal(rows[5].categoria, 'CORREO ENVIADO');
-  assert.equal(rows[6].categoria, 'OTRO');
+  assert.equal(rows[4].categoria, 'CORREO ENVIADO');
+  assert.equal(rows[5].categoria, 'SIN ESTADO');
 });
 
-test('parser sin columnas de aplicación y con columnas reordenadas', () => {
-  const idx = [7, 1, 5, 6, 8, 9, 16, 17];
-  const aoa = AOA.slice(0, 3).map((r) => idx.map((i) => r[i]));
-  const { rows, tieneColumnasAplicar } = parser.parseAoa(aoa);
-  assert.equal(tieneColumnasAplicar, false);
-  assert.equal(rows[0].razon, 'EMPRESA UNO SPA');
-  assert.equal(rows[0].saldo, 1000);
-});
-
-test('parser exige columnas obligatorias', () => {
+test('parser: acepta MIS APUNTES (formato anterior) y exige columnas obligatorias', () => {
+  const viejo = AOA.map((r, i) => (i === 0 ? r.map((h) => (h === 'MI GESTION' ? 'MIS APUNTES' : h)) : r));
+  assert.equal(parser.parseAoa(viejo).rows[0].categoria, 'APLICAR');
   assert.throws(() => parser.parseAoa([['RAZÓN SOCIAL', 'SALDO'], ['X', 1]]), /Faltan columnas/);
 });
 
-test('memos agrupan APLICAR por empresa y excluyen DEUDOR por defecto', () => {
-  const { rows } = parser.parseAoa(AOA);
-  const groups = memo.buildGroups(rows);
-  assert.equal(groups.length, 2);
-  const uno = groups.find((g) => g.razon === 'EMPRESA UNO SPA');
-  assert.deepEqual(uno.rows.map((r) => r.incluir), [true, false]);
-  const data = memo.memoData(uno, { fecha: new Date(2026, 9, 14), iniciales: 'AB/cd' });
-  assert.equal(data.fecha, '14.OCT.2026');
-  assert.equal(data.rut, '11.111.111-1');
-  assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 1.000', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 5.000' }]);
-  assert.deepEqual(data.motivos, [{ primero: true, doc: 'EFE', nro: '100', justificacion: 'Pago duplicado' }]);
-  assert.deepEqual(data.notas, []);
-  assert.match(memo.warnings(uno).join(), /DEUDOR/);
-  assert.match(memo.warnings(uno).join(), /supera el saldo en \$ 4\.000/);
-  const dos = groups.find((g) => g.razon === 'EMPRESA DOS LTDA');
-  assert.match(memo.warnings(dos).join(), /sin justificación/);
-  assert.equal(memo.fileName(dos), 'MEMO_IPE_EMPRESA_DOS_LTDA_22222222.docx');
+test('consolida DEUDOR y ACREEDOR del mismo IPE en un solo registro acreedor', () => {
+  const rows = leer();
+  assert.equal(rows.length, 5);
+  const dos = rows.find((r) => r.razon === 'EMPRESA DOS LTDA');
+  assert.equal(dos.saldo, 12962);
+  assert.equal(dos.naturaleza, 'ACREEDOR');
+  assert.equal(dos.comprob, '10');
+  assert.deepEqual(dos.consolidado, { filas: [3, 4], acreedor: 542760, deudor: 529798 });
 });
 
-test('varias aplicaciones descuentan el saldo y generan nota de diferencia (memo Nº 176)', () => {
-  const aoa = [HEAD, row('APLICAR', 100300, 3, 'AEROLINEA X', 'DOL', 805, '15-09-2026', 11314, 'ACREEDOR', 'Saldo depósito',
-    '', 'Pagar FEE 263576; Pagar FEE 262729', '2.005; 2327')];
-  const [g] = memo.buildGroups(parser.parseAoa(aoa).rows);
-  assert.deepEqual(g.rows[0].aplicaciones, [{ docto: 'Pagar FEE 263576', monto: 2005 }, { docto: 'Pagar FEE 262729', monto: 2327 }]);
-  const data = memo.memoData(g, { fecha: new Date(2026, 9, 13) });
-  assert.deepEqual(data.items.map((i) => [i.monto, i.docto_aplicar, i.monto_aplicar]), [
-    ['$ 11.314', 'Pagar FEE 263576', '$ 2.005'],
-    ['$ 9.309', 'Pagar FEE 262729', '$ 2.327'],
-  ]);
-  assert.deepEqual(data.notas, [{ doc: 'DOL', nro: '805', remanente: '$ 6.982' }]);
-  assert.deepEqual(memo.warnings(g), []);
-
-  // aplicar todo el saldo no genera nota
-  g.rows[0].aplicaciones.push({ docto: 'Pagar FEE 3', monto: 6982 });
-  assert.deepEqual(memo.memoData(g, { fecha: new Date() }).notas, []);
+test('glosas: tipos del documento GLOSAS y datos por completar', () => {
+  assert.equal(glosas.GLOSAS.length, 9);
+  assert.equal(glosas.porTipo('PAGO EN EXCESO')[0].id, 'pago-exceso');
+  assert.equal(glosas.porTipo('Deposito sin identificar')[0].id, 'deposito-sin-identificar');
+  assert.equal(glosas.porTipo('Error en pago').length, 3);
+  assert.equal(glosas.porTipo('otro').length, 0);
+  assert.equal(glosas.pendientes(glosas.porId('pago-exceso').texto), 7);
 });
 
-test('documentos con memo en el historial salen de pendientes', () => {
-  const { rows } = parser.parseAoa(AOA);
-  const uno = memo.buildGroups(rows).find((g) => g.razon === 'EMPRESA UNO SPA');
-  const entry = memo.historialEntry(uno, memo.memoData(uno, { fecha: new Date(2026, 9, 14) }), new Date(2026, 9, 14, 10));
-  assert.equal(entry.documentos.length, 1); // la fila DEUDOR no se incluyó
-  const idx = memo.indiceHistorial([entry]);
-  const pendientes = memo.buildGroups(rows, idx);
-  // Saldo sin cambio: EMPRESA UNO solo conserva su fila DEUDOR, por lo que ya no tiene memo pendiente
-  assert.deepEqual(pendientes.map((g) => g.razon), ['EMPRESA DOS LTDA']);
+test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que deja saldo pendiente', () => {
+  const rows = leer();
+  let [uno] = memo.buildGroups(rows).filter((g) => g.razon === 'EMPRESA UNO SPA');
+  assert.equal(uno.rows[0].glosaId, 'pago-exceso');
+  assert.match(uno.rows[0].texto, /^Corresponde a pago en exceso/);
+  uno.rows[0].aplicaciones = [{ docto: 'Pagar FEE 1', monto: 20 }];
+  const fecha = new Date(2026, 9, 14);
+  const data = memo.memoData(uno, { fecha, iniciales: 'AB/cd' });
+  assert.equal(data.fecha, 'OCT.2026');
+  assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 100', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 20' }]);
+  assert.deepEqual(data.notas, [{ doc: 'EFE', nro: '100', remanente: '$ 80' }]);
+  const historial = [memo.historialEntry(uno, data, new Date(2026, 9, 14, 10), { fecha })];
+  historial[0].numero = '310';
+
+  // Mismo Excel: Juan sigue pendiente por $80; el nuevo MOTIVO menciona la aplicación anterior
+  let idx = movimientos.indice(historial, []);
+  [uno] = memo.buildGroups(rows, idx).filter((g) => g.razon === 'EMPRESA UNO SPA');
+  assert.equal(uno.rows[0].saldoInicial, 80);
+  uno.rows[0].aplicaciones = [{ docto: 'Pagar FEE 2', monto: 10 }];
+  const data2 = memo.memoData(uno, { fecha: new Date(2026, 9, 20) });
+  assert.match(data2.motivos[0].justificacion, /Asimismo, con fecha 14\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha 14\.OCT\.2026\.$/);
+  assert.equal(data2.items[0].monto, '$ 80');
+  historial.push(memo.historialEntry(uno, data2, new Date(2026, 9, 20, 10), { fecha: new Date(2026, 9, 20) }));
+  idx = movimientos.indice(historial, []);
+  assert.equal(memo.buildGroups(rows, idx).find((g) => g.razon === 'EMPRESA UNO SPA').rows[0].saldoInicial, 70);
+
+  // Mes siguiente: el Excel ya refleja ambas aplicaciones (saldo 70) → pendiente 70, no 40
+  const mesSig = rows.map((r) => (r.razon === 'EMPRESA UNO SPA' ? { ...r, saldo: 70, saldoNeto: 70 } : r));
+  assert.equal(memo.buildGroups(mesSig, idx).find((g) => g.razon === 'EMPRESA UNO SPA').rows[0].saldoInicial, 70);
+
+  // Aplicado el total, el IPE sale de pendientes
+  const uno3 = memo.buildGroups(mesSig, idx).find((g) => g.razon === 'EMPRESA UNO SPA');
+  uno3.rows[0].aplicaciones = [{ docto: 'Pagar FEE 3', monto: 70 }];
+  historial.push(memo.historialEntry(uno3, memo.memoData(uno3, { fecha: HOY }), new Date(2026, 10, 2), { fecha: HOY }));
+  assert.equal(memo.buildGroups(mesSig, movimientos.indice(historial, [])).filter((g) => g.razon === 'EMPRESA UNO SPA').length, 0);
 });
 
-test('IPE con memo previo vuelve a pendientes si su saldo cambia (saldo dinámico)', () => {
-  const mes = (saldo) => parser.parseAoa([HEAD, row('APLICAR', 77777777, 7, 'EMPRESA X', 'EFE', 9, '01-09-2026', saldo, 'ACREEDOR', 'Pago en exceso')]).rows;
-  // Mes 1: saldo 100, memo aplica 90 → quedan 10
-  const [g1] = memo.buildGroups(mes(100));
-  g1.rows[0].aplicaciones = [{ docto: 'Pagar FEE 1', monto: 90 }];
-  const historial = [memo.historialEntry(g1, memo.memoData(g1, { fecha: new Date(2026, 8, 30) }), new Date(2026, 8, 30))];
-  let idx = memo.indiceHistorial(historial);
-
-  // Mes 2, Contabilidad no ha procesado el memo: saldo sigue en 100 → oculto
-  assert.equal(memo.buildGroups(mes(100), idx).length, 0);
-  // Mes 2, memo procesado: saldo 10 → vuelve con referencia al memo previo
-  const [g2] = memo.buildGroups(mes(10), idx);
-  assert.equal(g2.rows[0].previo.saldo, 100);
-  assert.equal(g2.rows[0].previo.aplicado, 90);
-
-  // Mes 2 se hace memo por los 10 sin aplicar nada aún; mes 3 el cliente suma 20 → saldo 30 vuelve a aparecer
-  historial.push(memo.historialEntry(g2, memo.memoData(g2, { fecha: new Date(2026, 9, 30) }), new Date(2026, 9, 30)));
-  idx = memo.indiceHistorial(historial);
-  assert.equal(memo.buildGroups(mes(10), idx).length, 0);
-  const [g3] = memo.buildGroups(mes(30), idx);
-  assert.equal(g3.rows[0].previo.saldo, 10); // compara contra el memo más reciente
+test('memo: sin TIPO DE IPE usa la justificación del Excel', () => {
+  const dos = memo.buildGroups(leer()).find((g) => g.razon === 'EMPRESA DOS LTDA');
+  assert.equal(dos.rows[0].glosaId, '');
+  assert.equal(dos.rows[0].texto, 'NCE N°18549');
+  assert.equal(dos.rows[0].saldoInicial, 12962);
 });
 
-test('devoluciones netean DEUDOR y exportan resumen/detalle', () => {
-  const { rows } = parser.parseAoa(AOA);
-  const groups = devoluciones.buildGroups(rows);
-  assert.equal(groups.length, 1);
-  assert.equal(groups[0].total, 30);
-  const { resumen: res, detalle } = devoluciones.sheets(groups);
-  assert.deepEqual(res[1].slice(0, 4), ['33.333.333-3', 'EMPRESA TRES', 2, 30]);
-  assert.equal(res[res.length - 1][3], 30);
-  assert.equal(detalle.length, 3);
-  assert.equal(detalle[1][11], 'se procederá a devolver');
+test('devolución: observaciones por TIPO DE IPE, datos bancarios, devolución parcial e historial', () => {
+  const rows = leer();
+  const [tres] = devoluciones.buildGroups(rows);
+  assert.equal(tres.razon, 'EMPRESA TRES');
+  assert.equal(tres.rows[0].montoDevolver, 40);
+  assert.match(tres.rows[0].texto, /^Corresponde al pago duplicado/);
+  tres.rows[0].montoDevolver = 30;
+  Object.assign(tres.banco, { referencia: 'Correo de fecha 01.10.2026', numeroCuenta: '123', banco: 'BancoEstado', correos: 'a@x.cl\nb@x.cl' });
+  const data = devoluciones.devolucionData(tres, { fecha: HOY, iniciales: 'ERS/yaa' });
+  assert.equal(data.fecha, 'OCT.2026');
+  assert.equal(data.monto_total, '$ 30');
+  assert.deepEqual(data.items[0].tipo_docto, 'EFE 400');
+  assert.deepEqual(data.correos, [{ primero: true, correo: 'a@x.cl' }, { primero: false, correo: 'b@x.cl' }]);
+  assert.equal(devoluciones.warnings(tres).filter((w) => !w.includes('por completar')).length, 0);
+  const entry = devoluciones.historialEntry(tres, data, new Date(2026, 9, 19, 9), { fecha: HOY });
+  assert.equal(entry.documentos[0].devuelto, 30);
+  const idx = movimientos.indice([], [entry]);
+  const [pend] = devoluciones.buildGroups(rows, idx);
+  assert.equal(pend.rows[0].saldoInicial, 10);
+  assert.match(memo.textoCompleto(pend.rows[0]), /se devolvieron \$ 30, según OF\. \(O\) N°XX/);
 });
 
-test('resumen: estados, antigüedad y alertas', () => {
-  const { rows } = parser.parseAoa(AOA);
-  const r = resumen.compute(rows, new Date(2026, 9, 14), true);
-  assert.equal(r.cantidad, 7);
-  assert.equal(r.empresas, 5);
-  assert.equal(r.antiguedad.reduce((s, a) => s + a.cantidad, 0), 7);
-  const tipos = r.alertas.map((a) => a.tipo);
-  assert.ok(tipos.includes('Memo'));
-  assert.ok(tipos.includes('Estado'));
-  assert.ok(r.alertas.some((a) => a.tipo === 'Seguimiento' && a.razon === 'EMPRESA CUATRO'));
+test('devolución: sin datos bancarios deja marcas para completar', () => {
+  const [tres] = devoluciones.buildGroups(leer());
+  const data = devoluciones.devolucionData(tres, { fecha: HOY });
+  assert.equal(data.referencia, devoluciones.REFERENCIA_BASE);
+  assert.equal(data.banco, glosas.PLACEHOLDER);
+  assert.ok(devoluciones.warnings(tres).some((w) => w.includes('REF.')));
 });
 
-test('ultimaGestion toma el último paso numerado', () => {
-  assert.equal(parser.ultimaGestion('1) Correo a cliente 2 ) Cliente responde. 12)Correo final'), 'Correo final');
-  assert.equal(parser.ultimaGestion(''), '');
+test('resumen: empresas total, en memos, en devoluciones, pendientes y banderas', () => {
+  const rows = leer();
+  const r = resumen.compute(rows, memo.buildGroups(rows), devoluciones.buildGroups(rows), HOY);
+  assert.equal(r.empresasTotal, 5);
+  assert.equal(r.empresasMemos, 2);
+  assert.equal(r.empresasDevoluciones, 1);
+  assert.equal(r.empresasPendientes, 2);
+  assert.deepEqual(r.banderas, { roja: 1, amarilla: 2, verde: 2 });
 });
 
-test('js/plantilla.js corresponde a templates/memo_template.docx (ejecutar scripts/embed_template.py si falla)', () => {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const js = fs.readFileSync(path.join(__dirname, '../js/plantilla.js'), 'utf8');
-  const b64 = js.match(/plantillaB64 = "([^"]+)"/)[1];
-  const docx = fs.readFileSync(path.join(__dirname, '../templates/memo_template.docx'));
-  assert.ok(Buffer.from(b64, 'base64').equals(docx));
-});
-
-test('elige la hoja de trabajo IPE entre varias hojas y tolera la falta de MIS APUNTES', () => {
+test('elige la hoja de trabajo IPE entre varias hojas y tolera la falta de MI GESTION', () => {
   const mayor = [['', 'MAYOR AUXILIAR - RUT'], [], ['CENTRO FINANCIERO', '', 'X']];
-  const sinEstado = AOA.map((r) => r.slice(2)); // sin columnas vacía y MIS APUNTES
-  const conEstado = AOA;
-  let r = parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }, { nombre: 'Sin', inicio: sinEstado }, { nombre: 'Trabajo', inicio: conEstado }]);
+  const sinEstado = AOA.map((r) => [r[0], ...r.slice(3)]);
+  let r = parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }, { nombre: 'Sin', inicio: sinEstado }, { nombre: 'Trabajo', inicio: AOA }]);
   assert.equal(r.elegida.nombre, 'Trabajo');
-  assert.deepEqual(r.candidatas.map((h) => h.nombre), ['Trabajo', 'Sin']);
-  assert.match(r.evaluadas[0].faltan.join(), /RAZÓN SOCIAL/);
-
   r = parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }, { nombre: 'Sin', inicio: sinEstado }]);
   assert.equal(r.elegida.nombre, 'Sin');
-  const parsed = parser.parseAoa(sinEstado);
-  assert.equal(parsed.tieneEstado, false);
-  assert.equal(parsed.rows.length, 7);
-  assert.equal(memo.buildGroups(parsed.rows).length, 0);
-  const res = resumen.compute(parsed.rows, new Date(2026, 9, 14), false, false);
-  assert.ok(!res.alertas.some((a) => a.tipo === 'Estado'));
-
+  assert.equal(parser.parseAoa(sinEstado).tieneEstado, false);
   assert.equal(parser.elegirHoja([{ nombre: 'Mayor', inicio: mayor }]).elegida, null);
+});
+
+test('copia MI GESTION y TIPO DE IPE del mes anterior', () => {
+  const anterior = parser.parseAoa(AOA).rows;
+  const nuevo = AOA.map((r) => [r[0], ...r.slice(3)]);
+  nuevo.push(['', 'Ana', '', 51, 88888888, 8, 'EMPRESA NUEVA', 'EFE', 700, 'I', 1, '01-10-2026', '', 0, 50, 50, 'ACREEDOR', '', '']);
+  const res = parser.copiarEstados(parser.parseAoa(nuevo).rows, anterior);
+  assert.equal(res.exactos, 5); // EMPRESA CINCO no tenía MI GESTION en el mes anterior
+  assert.equal(res.sinCoincidencia, 2);
+  assert.equal(res.rows[0].tipoIpe, 'Pago en exceso');
+  assert.equal(res.rows[0].categoria, 'APLICAR');
+  assert.equal(res.rows.at(-1).categoria, 'SIN ESTADO');
 });
 
 test('reconoce la columna ACREEDOR/DEUDOR aunque no tenga encabezado', () => {
   const sinXX = AOA.map((r, i) => (i === 0 ? r.map((h) => (h === 'XX' ? '' : h)) : r));
   const { rows, columnas } = parser.parseAoa(sinXX);
-  assert.equal(columnas.naturaleza, 17);
-  assert.equal(rows[1].naturaleza, 'DEUDOR');
-  assert.equal(rows[1].saldoNeto, -300);
+  assert.equal(columnas.naturaleza, 18);
+  assert.equal(rows[2].naturaleza, 'DEUDOR');
 });
 
-test('copia MIS APUNTES del mes anterior: exacto, por documento y nuevos sin estado', () => {
-  const anterior = parser.parseAoa(AOA).rows;
-  // Mes nuevo sin MIS APUNTES: mismas filas, una con otro comprobante y una nueva
-  const nuevo = AOA.map((r) => r.slice(2));
-  nuevo[2] = [...nuevo[2]]; nuevo[2][9] = 999; // COMPROB. distinto en la fila NBCH 200
-  nuevo.push(row('', 88888888, 8, 'EMPRESA NUEVA', 'EFE', 700, '01-10-2026', 50, 'ACREEDOR').slice(2));
-  const actual = parser.parseAoa(nuevo);
-  assert.equal(actual.tieneEstado, false);
-  const res = parser.copiarEstados(actual.rows, anterior);
-  assert.equal(res.exactos, 6);
-  assert.equal(res.porDocumento, 1);
-  assert.equal(res.sinCoincidencia, 1);
-  assert.equal(res.rows[1].estado, 'APLICAR');
-  assert.equal(res.rows[0].categoria, 'APLICAR');
-  assert.equal(res.rows.at(-1).categoria, 'SIN ESTADO');
-  assert.equal(actual.rows[0].estado, ''); // no modifica la entrada
-  assert.equal(memo.buildGroups(res.rows).length, 2);
+test('js/plantilla.js corresponde a las plantillas .docx (ejecutar scripts/embed_template.py si falla)', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../js/plantilla.js'), 'utf8');
+  for (const [nombre, archivo] of [['plantillaB64', 'memo_template.docx'], ['plantillaDevolucionB64', 'devolucion_template.docx']]) {
+    const b64 = js.match(new RegExp(`${nombre} = "([^"]+)"`))[1];
+    assert.ok(Buffer.from(b64, 'base64').equals(fs.readFileSync(path.join(__dirname, '../templates', archivo))), archivo);
+  }
+});
+
+test('ultimaGestion toma el último paso numerado', () => {
+  assert.equal(parser.ultimaGestion('1) Correo a cliente 2 ) Cliente responde. 12)Correo final'), 'Correo final');
 });

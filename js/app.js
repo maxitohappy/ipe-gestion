@@ -1,47 +1,54 @@
-// Interfaz: carga del Excel, pestañas, descargas e historial de memos.
+// Interfaz: carga del Excel, pestañas, documentos Word (memos y devoluciones) e historiales.
 (function () {
-  const { format: fmt, parser, memo, devoluciones, resumen } = window.IPE;
+  const { format: fmt, parser, memo, devoluciones, resumen, glosas, movimientos } = window.IPE;
   const $ = (id) => document.getElementById(id);
   const CONFIG_KEY = 'ipe-config';
   const HIST_KEY = 'ipe-historial';
+  const HIST_DEV_KEY = 'ipe-historial-devoluciones';
+  const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const state = { rows: [], memoGroups: [], devGroups: [], tieneColumnasAplicar: false, template: null, historial: [], alertas: [] };
+  const state = { rowsBase: [], rows: [], memoGroups: [], devGroups: [], historial: [], historialDev: [], plantillas: {} };
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clp = (n) => fmt.formatCLP(n);
   const hoyISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const BANDERAS = { roja: 'Ingreso de años anteriores', amarilla: 'Ingreso del 1er semestre del año en curso', verde: 'Ingreso del 2º semestre del año en curso' };
+  const flagHtml = (fecha) => {
+    const b = fmt.bandera(fecha);
+    return b ? `<span class="flag ${b}" title="${BANDERAS[b]}" role="img" aria-label="Bandera ${b}: ${BANDERAS[b]}"></span>` : '';
+  };
 
-  // ---------- configuración e historial (se guardan en este navegador) ----------
+  // ---------- configuración e historiales (se guardan en este navegador) ----------
   function readStore(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
   }
   function writeStore(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
   }
-
   function loadConfig() {
     const cfg = readStore(CONFIG_KEY, {});
     $('cfg-iniciales').value = cfg.iniciales ?? 'ERS/yaa';
-    const hoy = new Date();
-    $('cfg-fecha').value = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+    $('cfg-fecha').value = hoyISO();
   }
   function saveConfig() {
     writeStore(CONFIG_KEY, { iniciales: $('cfg-iniciales').value });
   }
-  function memoOpts() {
+  function docOpts() {
     const [y, m, d] = $('cfg-fecha').value.split('-').map(Number);
     return { fecha: y ? new Date(y, m - 1, d) : new Date(), iniciales: $('cfg-iniciales').value.trim() };
   }
-
-  function loadHistorial() {
+  function loadHistoriales() {
     const h = readStore(HIST_KEY, []);
+    const hd = readStore(HIST_DEV_KEY, []);
     state.historial = Array.isArray(h) ? h : [];
+    state.historialDev = Array.isArray(hd) ? hd : [];
   }
-  function saveHistorial() {
-    if (!writeStore(HIST_KEY, state.historial))
-      alert('No se pudo guardar el historial en este navegador. Descarga un respaldo para no perderlo.');
+  function saveHistoriales() {
+    const ok = writeStore(HIST_KEY, state.historial) && writeStore(HIST_DEV_KEY, state.historialDev);
+    if (!ok) alert('No se pudo guardar el historial en este navegador. Descarga un respaldo para no perderlo.');
   }
-  // ---------- carga ----------
+
+  // ---------- carga del Excel ----------
   const MSG_LEYENDO = 'Leyendo el Excel… (los libros con muchas hojas pueden tardar unos segundos)';
   const pausa = () => new Promise((r) => setTimeout(r, 50)); // deja que el navegador muestre el mensaje
 
@@ -97,12 +104,12 @@
     state.copia = null;
     $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(state.libro.nombreArchivo)} — hoja "${esc(nombre)}", ${parsed.rows.length} registros.`;
     $('sel-hoja').innerHTML = state.libro.candidatas.map((h) =>
-      `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MIS APUNTES)'}</option>`).join('');
+      `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MI GESTION)'}</option>`).join('');
     $('selector-hoja').hidden = state.libro.candidatas.length < 2;
     usarFilas(parsed.rows, parsed.tieneEstado);
   }
 
-  /** Copia MIS APUNTES desde el Excel de otro mes (el que sí tiene esa columna). */
+  /** Copia MI GESTION y TIPO DE IPE desde el Excel de otro mes (el que sí tiene esas columnas). */
   async function copiarApuntes(file) {
     if (!file) return;
     const previo = $('estado-carga').innerHTML;
@@ -111,7 +118,7 @@
     try {
       const libro = await leerLibro(file);
       const hoja = libro.candidatas.find((h) => h.tieneEstado);
-      if (!hoja) throw new Error(`"${file.name}" no tiene la columna MIS APUNTES: elige el Excel del mes anterior en que la completaste.`);
+      if (!hoja) throw new Error(`"${file.name}" no tiene la columna MI GESTION: elige el Excel del mes anterior en que la completaste.`);
       const origen = parser.parseAoa(leerHoja(libro, hoja.nombre)).rows;
       const res = parser.copiarEstados(state.parsed.rows, origen);
       state.copia = { archivo: file.name, hoja: hoja.nombre, ...res };
@@ -122,44 +129,54 @@
     }
   }
 
-  function usarFilas(rows, tieneEstado) {
-    state.rows = rows;
+  function usarFilas(rowsBase, tieneEstado) {
+    state.rowsBase = rowsBase;
+    // Un mismo IPE con movimientos DEUDOR y ACREEDOR se muestra como un solo registro con el saldo neto.
+    state.rows = parser.consolidar(rowsBase);
     state.tieneEstado = tieneEstado;
-    state.tieneColumnasAplicar = state.parsed.tieneColumnasAplicar;
-    state.devGroups = devoluciones.buildGroups(state.rows);
-    rebuildMemoGroups();
+    reconstruir();
 
     $('aviso-estado').hidden = tieneEstado;
     $('info-copia').hidden = !state.copia;
     if (state.copia) {
       const c = state.copia;
       $('info-copia-texto').innerHTML =
-        `Se copiaron los <b>MIS APUNTES</b> de <b>${c.exactos + c.porDocumento}</b> de ${rows.length} registros desde "${esc(c.archivo)}" ` +
-        `(${c.exactos} con el mismo comprobante y ${c.porDocumento} por documento). ` +
-        `<b>${c.sinCoincidencia}</b> registros son nuevos y quedan sin estado: aparecen como "SIN ESTADO" en el resumen y en las alertas.`;
+        `Se copiaron <b>MI GESTION</b> y <b>TIPO DE IPE</b> de <b>${c.exactos + c.porDocumento}</b> de ${rowsBase.length} registros desde "${esc(c.archivo)}" ` +
+        `(${c.exactos} con el mismo comprobante y ${c.porDocumento} por documento). <b>${c.sinCoincidencia}</b> registros son nuevos y quedan sin estado.`;
     }
-
     $('contenido').hidden = false;
+    renderTodo();
+  }
+
+  function reconstruir() {
+    const idx = movimientos.indice(state.historial, state.historialDev);
+    state.memoGroups = memo.buildGroups(state.rows, idx);
+    state.devGroups = devoluciones.buildGroups(state.rows, idx);
+  }
+
+  function renderTodo() {
     renderResumen();
     renderMemos();
     renderDevoluciones();
     renderHistorial();
+    renderHistorialDev();
   }
 
-  /** Descarga la hoja de trabajo con la columna MIS APUNTES (columna B), para seguir trabajando en Excel. */
+  /** Descarga la hoja de trabajo con TIPO DE IPE (B) y MI GESTION (C), para seguir trabajando en Excel. */
   function descargarHojaTrabajo() {
     const aoa = leerHoja(state.libro, state.hoja);
     const { filaEncabezado: h, columnas } = state.parsed;
-    const estados = new Map(state.rows.map((r) => [r.fila, r.estado]));
-    const tieneCol = columnas.estado !== undefined;
+    const porFila = new Map(state.rowsBase.map((r) => [r.fila, r]));
+    const campos = [{ k: 'tipoIpe', titulo: 'TIPO DE IPE' }, { k: 'estado', titulo: 'MI GESTION' }];
+    const faltan = campos.filter((c) => columnas[c.k] === undefined);
+    const valor = (i, c) => (i === h ? c.titulo : i > h ? (porFila.get(i + 1)?.[c.k] ?? '') : '');
     const salida = aoa.map((fila, i) => {
       const f = [...fila];
-      const valor = i === h ? 'MIS APUNTES' : i > h ? (estados.get(i + 1) ?? '') : '';
-      if (tieneCol) f[columnas.estado] = i < h ? f[columnas.estado] : valor;
-      else f.splice(1, 0, valor);
+      for (const c of campos) if (columnas[c.k] !== undefined && i >= h) f[columnas[c.k]] = valor(i, c);
+      f.splice(1, 0, ...faltan.map((c) => valor(i, c)));
       return f;
     });
-    const mover = (c) => (tieneCol || c < 1 ? c : c + 1);
+    const mover = (c) => (c < 1 ? c : c + faltan.length);
     if (columnas.naturaleza !== undefined && !String(salida[h][mover(columnas.naturaleza)] ?? '').trim()) salida[h][mover(columnas.naturaleza)] = 'XX';
     const ws = XLSX.utils.aoa_to_sheet(salida, { cellDates: true, dateNF: 'dd-mm-yyyy' });
     for (const k of ['debe', 'haber', 'saldo']) {
@@ -172,68 +189,100 @@
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, state.hoja.trim().slice(0, 31) || 'IPE');
     const base = state.libro.nombreArchivo.replace(/\.xls[xm]?$/i, '').replace(/[.\s]+$/, '');
-    XLSX.writeFile(wb, `${base} - con MIS APUNTES.xlsx`);
-  }
-
-  function rebuildMemoGroups() {
-    const idx = memo.indiceHistorial(state.historial);
-    state.memoGroups = memo.buildGroups(state.rows, idx);
-    state.ocultos = state.rows.filter((r) => r.categoria === 'APLICAR' && memo.ocultoPorHistorial(r, idx.get(memo.rowKey(r)))).length;
+    XLSX.writeFile(wb, `${base} - hoja de trabajo.xlsx`);
   }
 
   // ---------- resumen ----------
   function renderResumen() {
-    const r = resumen.compute(state.rows, new Date(), state.tieneColumnasAplicar, state.tieneEstado);
-    const cat = (c) => r.porEstado.find((e) => e.categoria === c) || { cantidad: 0, monto: 0 };
+    const r = resumen.compute(state.rows, state.memoGroups, state.devGroups);
+    state.listado = r.listado;
     const kpis = [
-      ['Saldo neto IPE', clp(r.total)],
-      ['Registros', r.cantidad],
-      ['Empresas', r.empresas],
-      ['A aplicar', `${cat('APLICAR').cantidad} · ${clp(cat('APLICAR').monto)}`],
-      ['A devolver', `${cat('DEVOLVER').cantidad} · ${clp(cat('DEVOLVER').monto)}`],
+      ['Empresas (total, por razón social)', r.empresasTotal],
+      ['Empresas en Memos (APLICAR)', r.empresasMemos],
+      ['Empresas en Devoluciones', r.empresasDevoluciones],
+      ['Empresas pendientes', r.empresasPendientes],
     ];
-    $('kpis').innerHTML = kpis.map(([l, v]) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('');
-    $('por-estado').innerHTML = table(['Estado', 'Cant.', 'Saldo neto'], r.porEstado.map((e) => [esc(e.categoria), e.cantidad, clp(e.monto)]), [false, true, true]);
-    $('antiguedad').innerHTML = table(['Desde la fecha del IPE', 'Cant.', 'Saldo neto'], r.antiguedad.map((a) => [esc(a.label), a.cantidad, clp(a.monto)]), [false, true, true]);
-
-    state.alertas = r.alertas;
-    const tipos = [...new Set(r.alertas.map((a) => a.tipo))];
-    $('filtro-alertas').innerHTML = ['<option value="">Todas</option>', ...tipos.map((t) => `<option>${esc(t)}</option>`)].join('');
-    renderAlertas();
+    $('kpis').innerHTML = kpis.map(([l, v]) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')
+      + `<div class="kpi"><div class="l">Banderas</div><div class="v flags-kpi">`
+      + ['roja', 'amarilla', 'verde'].map((b) => `<span title="${BANDERAS[b]}"><span class="flag ${b}"></span> ${r.banderas[b]}</span>`).join('')
+      + '</div></div>';
+    renderListado();
   }
 
-  function renderAlertas() {
-    const f = $('filtro-alertas').value;
-    const list = state.alertas.filter((a) => !f || a.tipo === f);
-    $('n-alertas').textContent = list.length;
-    $('alertas').innerHTML = list.length
-      ? table(['Fila', 'Tipo', 'Empresa', 'Documento', 'Detalle'], list.map((a) => [a.fila, esc(a.tipo), esc(a.razon), esc(a.doc), esc(a.mensaje)]), [true])
-      : '<p class="muted">Sin alertas.</p>';
+  function renderListado() {
+    const fb = $('filtro-bandera').value;
+    const q = $('buscar').value.trim().toLowerCase();
+    const lista = (state.listado || []).filter((r) => (!fb || r.bandera === fb)
+      && (!q || `${r.razon} ${r.rutFmt} ${r.rut} ${r.doc} ${r.nro}`.toLowerCase().includes(q)));
+    $('listado').innerHTML = lista.length
+      ? `<table><thead><tr><th></th><th>Empresa</th><th>RUT</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo</th><th>MI GESTION</th><th>TIPO DE IPE</th></tr></thead><tbody>
+        ${lista.map((r) => `<tr class="${r.naturaleza === 'DEUDOR' ? 'deudor' : ''}">
+          <td>${flagHtml(r.fecha)}</td><td>${esc(r.razon)}</td><td>${esc(r.rutFmt)}</td><td>${esc(r.doc)}</td><td>${esc(r.nro)}</td>
+          <td>${esc(fmt.fechaCorta(r.fecha))}</td>
+          <td class="n">${clp(r.saldo)}${r.consolidado ? `<div class="prev" title="Saldo acreedor menos saldo deudor del mismo IPE">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
+          <td>${esc(r.estado)}</td><td>${esc(r.tipoIpe)}</td></tr>`).join('')}
+        </tbody></table>`
+      : '<p class="muted">No hay ingresos anticipados con ese filtro.</p>';
   }
 
-  function table(headers, rows, numeric = []) {
-    const th = headers.map((h, i) => `<th class="${numeric[i] ? 'n' : ''}">${esc(h)}</th>`).join('');
-    const tr = rows.map((r) => `<tr>${r.map((c, i) => `<td class="${numeric[i] ? 'n' : ''}">${c}</td>`).join('')}</tr>`).join('');
-    return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+  // ---------- piezas comunes de memos y devoluciones ----------
+  function tipoSelect(r, ri) {
+    const opciones = glosas.GLOSAS.map((g) => `<option value="${g.id}" ${g.id === r.glosaId ? 'selected' : ''}>${esc(glosas.etiqueta(g))}</option>`).join('');
+    const aviso = r.tipoIpe && !glosas.porTipo(r.tipoIpe).length ? `<div class="prev">En el Excel: "${esc(r.tipoIpe)}" (no está en las glosas)</div>` : '';
+    return `<select data-f="glosa" data-r="${ri}" aria-label="Tipo de IPE"><option value="">(sin tipo: usar justificación del Excel)</option>${opciones}</select>${aviso}`;
   }
+
+  function previosHtml(r) {
+    if (!r.previos || !r.previos.length) return '';
+    return `<div class="prev">${r.previos.filter((m) => m.monto > 0).map((m) =>
+      `${m.tipo === 'devolucion' ? 'Devuelto' : 'Aplicado'} ${clp(m.monto)} · ${m.tipo === 'devolucion' ? 'OF.' : 'MEMO'} N°${esc(m.numero || 'XX')} del ${esc(m.fecha)}`).join('<br>')}</div>`;
+  }
+
+  /** Cambio de TIPO DE IPE: reemplaza el texto por la glosa elegida (o por la justificación del Excel). */
+  function aplicarGlosa(row, glosaId, card, ri) {
+    row.glosaId = glosaId;
+    const g = glosas.porId(glosaId);
+    row.texto = g ? g.texto : row.justificacion;
+    const ta = card.querySelector(`textarea[data-f="texto"][data-r="${ri}"]`);
+    if (ta) ta.value = row.texto;
+  }
+
+  function alertError(err) {
+    console.error(err);
+    const detalle = err.properties && err.properties.errors ? err.properties.errors.map((e) => e.properties.explanation).join('\n') : '';
+    alert(`No se pudo generar el documento: ${err.message}\n${detalle}`);
+  }
+
+  // Las plantillas vienen incrustadas en js/plantilla.js: funcionan en línea y abriendo index.html sin internet.
+  function plantilla(nombre) {
+    if (!state.plantillas[nombre]) {
+      const b64 = window.IPE[nombre];
+      if (!b64) throw new Error('No se encontró la plantilla Word (js/plantilla.js).');
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      state.plantillas[nombre] = bytes.buffer;
+    }
+    return state.plantillas[nombre];
+  }
+  const renderMemo = (data) => memo.render(plantilla('plantillaB64'), data, PizZip, window.docxtemplater);
+  const renderDevolucion = (data) => devoluciones.render(plantilla('plantillaDevolucionB64'), data, PizZip, window.docxtemplater);
 
   // ---------- memos ----------
   function renderMemos() {
     const groups = state.memoGroups;
     $('n-memos').textContent = groups.length;
-    $('aviso-columnas').hidden = state.tieneColumnasAplicar;
-    $('memos-resumen').textContent = `${groups.length} empresa(s) con IPE pendientes de memo.`;
-    $('ocultos-hist').textContent = state.ocultos ? `${state.ocultos} documento(s) APLICAR no se muestran: ya tienen memo en el Historial y su saldo no ha cambiado (Contabilidad aún no lo procesa).` : '';
+    $('memos-resumen').textContent = `${groups.length} empresa(s) con IPE pendientes de aplicación.`;
     $('btn-zip').disabled = !groups.length;
-    $('memos').innerHTML = groups.map((g, gi) => cardHtml(g, gi)).join('') || '<p class="muted">No hay memos pendientes.</p>';
-    groups.forEach((g, gi) => refreshGroup(gi));
+    $('memos').innerHTML = groups.map((g, gi) => memoCardHtml(g, gi)).join('') || '<p class="muted">No hay memos pendientes.</p>';
+    groups.forEach((g, gi) => refreshMemo(gi));
   }
 
   function montoInput(v) {
     return v === '' || v === null || v === undefined ? '' : fmt.miles(Number(v));
   }
 
-  function cardHtml(g, gi) {
+  function memoCardHtml(g, gi) {
     return `
       <div class="card" data-g="${gi}">
         <div class="memo-head">
@@ -242,14 +291,15 @@
         </div>
         <div class="scroll">
         <table>
-          <thead><tr><th>Incluir</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo IPE</th><th>XX</th><th>Justificación (MOTIVO)</th><th>Documentos a aplicar · monto · saldo que queda</th><th class="n">Saldo final</th></tr></thead>
+          <thead><tr><th>Incluir</th><th></th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>TIPO DE IPE y MOTIVO</th><th>Documentos a aplicar · monto · saldo que queda</th><th class="n">Saldo final</th></tr></thead>
           <tbody>
             ${g.rows.map((r, ri) => `
-              <tr class="${r.naturaleza === 'DEUDOR' ? 'deudor' : ''}">
+              <tr>
                 <td><input type="checkbox" data-f="incluir" data-r="${ri}" ${r.incluir ? 'checked' : ''} aria-label="Incluir ${esc(r.doc)} ${esc(r.nro)}"></td>
-                <td>${esc(r.doc)}</td><td>${esc(r.nro)}${r.previo ? `<div class="prev">Memo previo ${esc(r.previo.fechaMemo)}: saldo entonces ${clp(r.previo.saldo)}, aplicado ${clp(r.previo.aplicado)}. Saldo actual ${clp(r.saldo)}.</div>` : ''}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
-                <td class="n">${clp(r.saldo)}</td><td>${esc(r.naturaleza)}</td>
-                <td><input type="text" data-f="justificacion" data-r="${ri}" value="${esc(r.justificacion)}"></td>
+                <td>${flagHtml(r.fecha)}</td>
+                <td>${esc(r.doc)}</td><td>${esc(r.nro)}${previosHtml(r)}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
+                <td class="n">${clp(r.saldoInicial)}${r.saldoInicial !== r.saldo ? `<div class="prev">saldo Excel ${clp(r.saldo)}</div>` : ''}${r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
+                <td class="motivo">${tipoSelect(r, ri)}<textarea data-f="texto" data-r="${ri}" rows="4" aria-label="MOTIVO">${esc(r.texto)}</textarea></td>
                 <td class="apls">
                   ${r.aplicaciones.map((a, ai) => `
                     <div class="apl">
@@ -270,16 +320,10 @@
       </div>`;
   }
 
-  function rerenderCard(gi) {
-    const card = document.querySelector(`[data-g="${gi}"]`);
-    card.outerHTML = cardHtml(state.memoGroups[gi], gi);
-    refreshGroup(gi);
-  }
-
   /** Actualiza saldos, vista previa y advertencias sin redibujar los campos (no se pierde el foco). */
-  function refreshGroup(gi) {
+  function refreshMemo(gi) {
     const g = state.memoGroups[gi];
-    const card = document.querySelector(`[data-g="${gi}"]`);
+    const card = document.querySelector(`#memos [data-g="${gi}"]`);
     g.rows.forEach((r, ri) => {
       const { pasos, remanente } = memo.calcular(r);
       pasos.forEach((p, ai) => {
@@ -291,194 +335,301 @@
       fin.textContent = clp(remanente);
       fin.classList.toggle('neg', remanente < 0);
     });
-    const data = memo.memoData(g, memoOpts());
-    const motivo = data.motivos.map((m) => `<b>${esc(m.doc)} ${esc(m.nro)}:</b> ${esc(m.justificacion)}`).join('<br>');
+    const data = memo.memoData(g, docOpts());
     const notas = data.notas.map((n) => `Nota: Diferencia de ${esc(n.doc)} ${esc(n.nro)} por ${esc(n.remanente)}.- mantener en la cuenta…`).join('<br>');
     card.querySelector(`[data-preview="${gi}"]`).innerHTML =
-      `<div><b>MOTIVO:</b><br>${motivo || '—'}</div><div>Filas en la tabla del memo: ${data.items.length}</div>${notas ? `<div>${notas}</div>` : ''}`;
+      `<div><b>Fecha en el memo:</b> SANTIAGO, ${esc(data.fecha)} · <b>Filas en la tabla:</b> ${data.items.length}</div>${notas ? `<div>${notas}</div>` : ''}`;
     card.querySelector(`[data-warn="${gi}"]`).innerHTML = memo.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
   }
 
-  // La plantilla viene incrustada en js/plantilla.js: funciona en línea y abriendo index.html sin internet.
-  async function getTemplate() {
-    if (!state.template) {
-      const b64 = window.IPE.plantillaB64;
-      if (!b64) throw new Error('No se encontró la plantilla del memo (js/plantilla.js).');
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      state.template = bytes.buffer;
-    }
-    return state.template;
-  }
-
-  async function renderDocx(data) {
-    const tpl = await getTemplate();
-    return memo.render(tpl, data, PizZip, window.docxtemplater);
-  }
-
-  const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-  function registrar(entries) {
+  function registrarMemos(entries) {
     state.historial.push(...entries);
-    saveHistorial();
-    rebuildMemoGroups();
-    renderMemos();
-    renderHistorial();
+    saveHistoriales();
+    reconstruir();
+    renderTodo();
   }
 
-  async function downloadOne(gi) {
+  async function downloadMemo(gi) {
     const g = state.memoGroups[gi];
     if (!g.rows.some((r) => r.incluir)) return alert('Selecciona al menos un documento.');
     try {
-      const data = memo.memoData(g, memoOpts());
-      const zip = await renderDocx(data);
-      saveAs(zip.generate({ type: 'blob', mimeType: DOCX_MIME }), memo.fileName(g));
-      registrar([memo.historialEntry(g, data, new Date())]);
+      const opts = docOpts();
+      const data = memo.memoData(g, opts);
+      saveAs(renderMemo(data).generate({ type: 'blob', mimeType: DOCX_MIME }), memo.fileName(g, opts.fecha));
+      registrarMemos([memo.historialEntry(g, data, new Date(), opts)]);
     } catch (err) { alertError(err); }
   }
 
-  async function downloadAll() {
+  async function downloadMemos() {
     try {
       const out = new PizZip();
       const entries = [];
       const ahora = new Date();
+      const opts = docOpts();
       for (const g of state.memoGroups) {
         if (!g.rows.some((r) => r.incluir)) continue;
-        const data = memo.memoData(g, memoOpts());
-        const zip = await renderDocx(data);
-        out.file(memo.fileName(g), zip.generate({ type: 'uint8array' }));
-        entries.push(memo.historialEntry(g, data, ahora));
+        const data = memo.memoData(g, opts);
+        out.file(memo.fileName(g, opts.fecha), renderMemo(data).generate({ type: 'uint8array' }));
+        entries.push(memo.historialEntry(g, data, ahora, opts));
       }
       if (!entries.length) return;
       saveAs(out.generate({ type: 'blob' }), `Memos_IPE_${$('cfg-fecha').value}.zip`);
-      registrar(entries);
+      registrarMemos(entries);
     } catch (err) { alertError(err); }
-  }
-
-  function alertError(err) {
-    console.error(err);
-    const detalle = err.properties && err.properties.errors ? err.properties.errors.map((e) => e.properties.explanation).join('\n') : '';
-    alert(`No se pudo generar el memo: ${err.message}\n${detalle}`);
-  }
-
-  // ---------- historial ----------
-  function renderHistorial() {
-    const h = [...state.historial].sort((a, b) => b.generado.localeCompare(a.generado));
-    $('n-hist').textContent = h.length;
-    $('hist-resumen').textContent = `${h.length} memo(s) generados · ${h.reduce((s, e) => s + e.documentos.length, 0)} documento(s).`;
-    $('historial').innerHTML = h.length
-      ? `<table><thead><tr><th>Generado</th><th>Fecha memo</th><th>Empresa</th><th>RUT</th><th>Documentos (aplicado / queda)</th><th></th></tr></thead><tbody>
-        ${h.map((e) => `<tr>
-          <td>${esc(new Date(e.generado).toLocaleString('es-CL'))}</td>
-          <td>${esc(e.fechaMemo)}</td><td>${esc(e.empresa)}</td><td>${esc(e.rut)}</td>
-          <td>${e.documentos.map((d) => `<b>${esc(d.doc)} ${esc(d.nro)}</b>: ${clp(d.aplicado)} / ${clp(d.remanente)}`).join('<br>')}</td>
-          <td><div class="actions">
-            <button class="link" data-redl="${esc(e.id)}">Descargar de nuevo</button>
-            <button class="link" data-undo="${esc(e.id)}">Volver a pendientes</button>
-          </div></td></tr>`).join('')}
-        </tbody></table>`
-      : '<p class="muted">Aún no se han generado memos.</p>';
-  }
-
-  async function redownload(id) {
-    const e = state.historial.find((x) => x.id === id);
-    if (!e) return;
-    try {
-      const zip = await renderDocx(e.data);
-      saveAs(zip.generate({ type: 'blob', mimeType: DOCX_MIME }), e.archivo);
-    } catch (err) { alertError(err); }
-  }
-
-  function undo(id) {
-    const e = state.historial.find((x) => x.id === id);
-    if (!e || !confirm(`¿Quitar del historial el memo de ${e.empresa}? Sus documentos volverán a "Memos" como pendientes.`)) return;
-    state.historial = state.historial.filter((x) => x.id !== id);
-    saveHistorial();
-    rebuildMemoGroups();
-    renderMemos();
-    renderHistorial();
-  }
-
-  function exportHistorialXlsx() {
-    const aoa = [['Generado', 'Fecha memo', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo IPE', 'Aplicaciones', 'Total aplicado', 'Saldo que queda', 'Archivo']];
-    for (const e of state.historial) {
-      for (const d of e.documentos) {
-        aoa.push([new Date(e.generado).toLocaleString('es-CL'), e.fechaMemo, e.empresa, e.rut, d.doc, d.nro, d.saldo, d.aplicaciones, d.aplicado, d.remanente, e.archivo]);
-      }
-    }
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [18, 12, 40, 14, 6, 12, 14, 50, 14, 14, 45].map((wch) => ({ wch }));
-    for (let r = 1; r < aoa.length; r++) for (const c of [6, 8, 9]) { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell) cell.z = '"$" #,##0'; }
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial memos');
-    XLSX.writeFile(wb, `Historial_memos_IPE_${hoyISO()}.xlsx`);
-  }
-
-  function backupHistorial() {
-    const blob = new Blob([JSON.stringify({ tipo: 'ipe-historial', version: 1, historial: state.historial }, null, 1)], { type: 'application/json' });
-    saveAs(blob, `respaldo_historial_IPE_${hoyISO()}.json`);
-  }
-
-  async function importHistorial(file) {
-    if (!file) return;
-    try {
-      const json = JSON.parse(await file.text());
-      const lista = Array.isArray(json) ? json : json.historial;
-      if (!Array.isArray(lista) || lista.some((e) => !e.id || !Array.isArray(e.documentos))) throw new Error('El archivo no es un respaldo válido del historial.');
-      const ids = new Set(state.historial.map((e) => e.id));
-      const nuevos = lista.filter((e) => !ids.has(e.id));
-      state.historial.push(...nuevos);
-      saveHistorial();
-      rebuildMemoGroups();
-      renderMemos();
-      renderHistorial();
-      alert(`Se importaron ${nuevos.length} memo(s) al historial.`);
-    } catch (err) {
-      alert(`No se pudo importar: ${err.message}`);
-    }
   }
 
   // ---------- devoluciones ----------
   function renderDevoluciones() {
     const groups = state.devGroups;
-    const total = groups.reduce((s, g) => s + g.total, 0);
     $('n-dev').textContent = groups.length;
-    $('dev-resumen').textContent = `${groups.length} empresa(s), ${groups.reduce((s, g) => s + g.rows.length, 0)} IPE en estado DEVOLVER · total neto ${clp(total)}`;
-    $('btn-dev').disabled = !groups.length;
-    $('devoluciones').innerHTML = groups.length
-      ? table(['RUT', 'Razón social', 'Documentos', 'Total a devolver', 'Última gestión'],
-        groups.map((g) => [esc(g.rutFmt), esc(g.razon), esc(g.rows.map((r) => `${r.doc} ${r.nro}`).join(', ')), clp(g.total),
-          esc(parser.ultimaGestion(g.rows[g.rows.length - 1].gestion))]), [false, false, false, true])
-      : '<p class="muted">No hay registros con estado DEVOLVER.</p>';
+    $('dev-resumen').textContent = `${groups.length} empresa(s) con IPE pendientes de devolución.`;
+    $('btn-zip-dev').disabled = !groups.length;
+    $('devoluciones').innerHTML = groups.map((g, gi) => devCardHtml(g, gi)).join('') || '<p class="muted">No hay devoluciones pendientes.</p>';
+    groups.forEach((g, gi) => refreshDev(gi));
   }
 
-  function downloadDevoluciones() {
-    const { resumen: res, detalle } = devoluciones.sheets(state.devGroups);
-    const wb = XLSX.utils.book_new();
-    const add = (aoa, name, widths, moneyCols) => {
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = widths.map((wch) => ({ wch }));
-      for (let r = 1; r < aoa.length; r++) {
-        for (const c of moneyCols) {
-          const cell = ws[XLSX.utils.encode_cell({ r, c })];
-          if (cell && cell.t === 'n') cell.z = '"$" #,##0';
-        }
+  function devCardHtml(g, gi) {
+    const b = g.banco;
+    return `
+      <div class="card" data-g="${gi}">
+        <div class="memo-head">
+          <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span></h3>
+          <button class="secondary" data-download="${gi}">Descargar Word</button>
+        </div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Incluir</th><th></th><th>C.F.</th><th>Tipo docto.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>Monto a devolver</th><th>TIPO DE IPE y OBSERVACIONES</th></tr></thead>
+          <tbody>
+            ${g.rows.map((r, ri) => `
+              <tr>
+                <td><input type="checkbox" data-f="incluir" data-r="${ri}" ${r.incluir ? 'checked' : ''} aria-label="Incluir ${esc(r.doc)} ${esc(r.nro)}"></td>
+                <td>${flagHtml(r.fecha)}</td>
+                <td>${esc(r.cf)}</td><td>${esc(r.doc)} ${esc(r.nro)}${previosHtml(r)}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
+                <td class="n">${clp(r.saldoInicial)}${r.saldoInicial !== r.saldo ? `<div class="prev">saldo Excel ${clp(r.saldo)}</div>` : ''}${r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
+                <td><input type="text" class="monto" data-f="montoDevolver" data-r="${ri}" value="${esc(montoInput(r.montoDevolver))}" inputmode="numeric" aria-label="Monto a devolver"><div class="prev" data-rest="${ri}"></div></td>
+                <td class="motivo">${tipoSelect(r, ri)}<textarea data-f="texto" data-r="${ri}" rows="4" aria-label="Observaciones">${esc(r.texto)}</textarea></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+        <div class="form banco">
+          <label class="ancho">REF.<input type="text" data-b="referencia" value="${esc(b.referencia)}" placeholder="Correo electrónico … de fecha dd.mm.aaaa a las hh:mm hrs."></label>
+          <label>Tipo de cuenta<select data-b="tipoCuenta">${devoluciones.TIPOS_CUENTA.map((t) => `<option ${t === b.tipoCuenta ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label>Número de cuenta<input type="text" data-b="numeroCuenta" value="${esc(b.numeroCuenta)}"></label>
+          <label>Banco<input type="text" data-b="banco" value="${esc(b.banco)}"></label>
+          <label class="ancho">Correos electrónicos (uno por línea)<textarea data-b="correos" rows="2">${esc(b.correos)}</textarea></label>
+        </div>
+        <div class="preview" data-preview="${gi}"></div>
+        <ul class="warnings" data-warn="${gi}"></ul>
+      </div>`;
+  }
+
+  function refreshDev(gi) {
+    const g = state.devGroups[gi];
+    const card = document.querySelector(`#devoluciones [data-g="${gi}"]`);
+    g.rows.forEach((r, ri) => {
+      const queda = r.saldoInicial - (Number(r.montoDevolver) || 0);
+      const el = card.querySelector(`[data-rest="${ri}"]`);
+      el.textContent = queda ? `queda pendiente ${clp(queda)}` : 'devolución total';
+      el.classList.toggle('neg', queda < 0);
+    });
+    const data = devoluciones.devolucionData(g, docOpts());
+    card.querySelector(`[data-preview="${gi}"]`).innerHTML =
+      `<div><b>Fecha en el oficio:</b> SANTIAGO, ${esc(data.fecha)} · <b>Monto de devolución:</b> ${esc(data.monto_total)}</div>`;
+    card.querySelector(`[data-warn="${gi}"]`).innerHTML = devoluciones.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
+  }
+
+  function registrarDevoluciones(entries) {
+    state.historialDev.push(...entries);
+    saveHistoriales();
+    reconstruir();
+    renderTodo();
+  }
+
+  async function downloadDev(gi) {
+    const g = state.devGroups[gi];
+    if (!g.rows.some((r) => r.incluir)) return alert('Selecciona al menos un documento.');
+    try {
+      const opts = docOpts();
+      const data = devoluciones.devolucionData(g, opts);
+      saveAs(renderDevolucion(data).generate({ type: 'blob', mimeType: DOCX_MIME }), devoluciones.fileName(g, opts.fecha));
+      registrarDevoluciones([devoluciones.historialEntry(g, data, new Date(), opts)]);
+    } catch (err) { alertError(err); }
+  }
+
+  async function downloadDevs() {
+    try {
+      const out = new PizZip();
+      const entries = [];
+      const ahora = new Date();
+      const opts = docOpts();
+      for (const g of state.devGroups) {
+        if (!g.rows.some((r) => r.incluir)) continue;
+        const data = devoluciones.devolucionData(g, opts);
+        out.file(devoluciones.fileName(g, opts.fecha), renderDevolucion(data).generate({ type: 'uint8array' }));
+        entries.push(devoluciones.historialEntry(g, data, ahora, opts));
       }
-      XLSX.utils.book_append_sheet(wb, ws, name);
-    };
-    add(res, 'Resumen', [14, 40, 9, 16, 18, 16, 18, 28, 30], [3]);
-    add(detalle, 'Detalle', [14, 40, 6, 7, 12, 10, 11, 12, 10, 12, 35, 60, 8], [7, 9]);
-    XLSX.writeFile(wb, `Devoluciones_IPE_${hoyISO()}.xlsx`);
+      if (!entries.length) return;
+      saveAs(out.generate({ type: 'blob' }), `Devoluciones_IPE_${$('cfg-fecha').value}.zip`);
+      registrarDevoluciones(entries);
+    } catch (err) { alertError(err); }
+  }
+
+  // ---------- historiales ----------
+  function tablaHistorial(lista, etiquetaNumero, columnaMonto, montoDoc) {
+    return `<table><thead><tr><th>Generado</th><th>Fecha</th><th>${etiquetaNumero}</th><th>Empresa</th><th>RUT</th><th>Documentos (${columnaMonto} / queda pendiente)</th><th></th></tr></thead><tbody>
+      ${lista.map((e) => `<tr>
+        <td>${esc(new Date(e.generado).toLocaleString('es-CL'))}</td>
+        <td>${esc(e.fechaCompleta || e.fechaMemo || e.fechaDocumento)}</td>
+        <td><input type="text" class="numero" data-num="${esc(e.id)}" value="${esc(e.numero || '')}" placeholder="N°" aria-label="${etiquetaNumero}"></td>
+        <td>${esc(e.empresa)}</td><td>${esc(e.rut)}</td>
+        <td>${e.documentos.map((d) => `<b>${esc(d.doc)} ${esc(d.nro)}</b>: ${clp(montoDoc(d))} / ${clp(d.remanente)}`).join('<br>')}</td>
+        <td><div class="actions">
+          <button class="link" data-redl="${esc(e.id)}">Descargar de nuevo</button>
+          <button class="link" data-undo="${esc(e.id)}">Volver a pendientes</button>
+        </div></td></tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  const ordenar = (lista) => [...lista].sort((a, b) => b.generado.localeCompare(a.generado));
+
+  function renderHistorial() {
+    const h = ordenar(state.historial);
+    $('n-hist').textContent = h.length;
+    $('hist-resumen').textContent = `${h.length} memo(s) generados. Anota el N° de cada memo: se usa en la frase "Asimismo… según MEMO N°…" de los memos siguientes.`;
+    $('historial').innerHTML = h.length ? tablaHistorial(h, 'N° memo', 'aplicado', (d) => d.aplicado) : '<p class="muted">Aún no se han generado memos.</p>';
+  }
+
+  function renderHistorialDev() {
+    const h = ordenar(state.historialDev);
+    $('n-hist-dev').textContent = h.length;
+    $('hist-dev-resumen').textContent = `${h.length} devolución(es) generadas. Anota el N° de oficio de cada una.`;
+    $('historial-dev').innerHTML = h.length ? tablaHistorial(h, 'N° oficio', 'devuelto', (d) => d.devuelto) : '<p class="muted">Aún no se han generado devoluciones.</p>';
+  }
+
+  function eventosHistorial(contenedor, lista, nombre) {
+    $(contenedor).addEventListener('click', (ev) => {
+      const t = ev.target.closest('button');
+      if (!t) return;
+      const e = state[lista].find((x) => x.id === (t.dataset.redl || t.dataset.undo));
+      if (!e) return;
+      if (t.dataset.redl) {
+        try {
+          const zip = e.tipo === 'devolucion' ? renderDevolucion(e.data) : renderMemo(e.data);
+          saveAs(zip.generate({ type: 'blob', mimeType: DOCX_MIME }), e.archivo);
+        } catch (err) { alertError(err); }
+      } else if (confirm(`¿Quitar del historial ${nombre} de ${e.empresa}? Sus montos volverán a quedar pendientes.`)) {
+        state[lista] = state[lista].filter((x) => x.id !== e.id);
+        saveHistoriales();
+        reconstruir();
+        renderTodo();
+      }
+    });
+    $(contenedor).addEventListener('change', (ev) => {
+      const id = ev.target.dataset.num;
+      const e = id && state[lista].find((x) => x.id === id);
+      if (!e) return;
+      e.numero = ev.target.value.trim();
+      saveHistoriales();
+      // No se redibuja el historial (el campo se está editando): solo lo que usa el N° en la frase "Asimismo".
+      reconstruir();
+      renderResumen();
+      renderMemos();
+      renderDevoluciones();
+    });
+  }
+
+  function exportarHistorialXlsx(lista, hoja, archivo, cabecera, fila) {
+    const aoa = [cabecera];
+    for (const e of lista) for (const d of e.documentos) aoa.push(fila(e, d));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = cabecera.map((c) => ({ wch: Math.max(10, c.length + 4) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, hoja);
+    XLSX.writeFile(wb, `${archivo}_${hoyISO()}.xlsx`);
+  }
+
+  function backup() {
+    const blob = new Blob([JSON.stringify({ tipo: 'ipe-historial', version: 2, historial: state.historial, historialDevoluciones: state.historialDev }, null, 1)], { type: 'application/json' });
+    saveAs(blob, `respaldo_historial_IPE_${hoyISO()}.json`);
+  }
+
+  async function importar(file) {
+    if (!file) return;
+    try {
+      const json = JSON.parse(await file.text());
+      const memos = Array.isArray(json) ? json : json.historial || [];
+      const devs = Array.isArray(json) ? [] : json.historialDevoluciones || [];
+      const valido = (l) => Array.isArray(l) && l.every((e) => e.id && Array.isArray(e.documentos));
+      if (!valido(memos) || !valido(devs)) throw new Error('El archivo no es un respaldo válido del historial.');
+      const sumar = (destino, nuevos) => {
+        const ids = new Set(state[destino].map((e) => e.id));
+        const add = nuevos.filter((e) => !ids.has(e.id));
+        state[destino].push(...add);
+        return add.length;
+      };
+      const nm = sumar('historial', memos);
+      const nd = sumar('historialDev', devs);
+      saveHistoriales();
+      reconstruir();
+      renderTodo();
+      alert(`Se importaron ${nm} memo(s) y ${nd} devolución(es).`);
+    } catch (err) {
+      alert(`No se pudo importar: ${err.message}`);
+    }
   }
 
   // ---------- eventos ----------
+  /** Edición de campos en tarjetas de memos o devoluciones. */
+  function eventosTarjetas(contenedor, grupos, refresh, rerender) {
+    $(contenedor).addEventListener('input', (e) => {
+      const card = e.target.closest('[data-g]');
+      if (!card) return;
+      const gi = Number(card.dataset.g);
+      const g = state[grupos][gi];
+      if (e.target.dataset.b) {
+        g.banco[e.target.dataset.b] = e.target.value;
+        return refresh(gi);
+      }
+      const f = e.target.dataset.f;
+      if (!f) return;
+      const ri = Number(e.target.dataset.r);
+      const row = g.rows[ri];
+      if (f === 'incluir') row.incluir = e.target.checked;
+      else if (f === 'texto') row.texto = e.target.value;
+      else if (f === 'glosa') aplicarGlosa(row, e.target.value, card, ri);
+      else if (f === 'montoDevolver') row.montoDevolver = e.target.value.trim() === '' ? '' : fmt.toNumber(e.target.value);
+      else {
+        const apl = row.aplicaciones[Number(e.target.dataset.a)];
+        if (f === 'docto') apl.docto = e.target.value;
+        else apl.monto = e.target.value.trim() === '' ? '' : fmt.toNumber(e.target.value);
+      }
+      refresh(gi);
+    });
+    $(contenedor).addEventListener('click', (e) => {
+      const card = e.target.closest('[data-g]');
+      const t = e.target.closest('button');
+      if (!card || !t) return;
+      const gi = Number(card.dataset.g);
+      const g = state[grupos][gi];
+      if (t.dataset.download !== undefined) rerender.download(gi);
+      else if (t.dataset.add !== undefined) {
+        g.rows[Number(t.dataset.add)].aplicaciones.push({ docto: '', monto: '' });
+        rerender.card(gi);
+      } else if (t.dataset.del !== undefined) {
+        const [ri, ai] = t.dataset.del.split('-').map(Number);
+        g.rows[ri].aplicaciones.splice(ai, 1);
+        rerender.card(gi);
+      }
+    });
+  }
+
   function init() {
     const local = location.protocol === 'file:';
     $('modo-local').hidden = !local;
     $('modo-web').hidden = local;
     loadConfig();
-    loadHistorial();
+    loadHistoriales();
     $('archivo').addEventListener('change', (e) => handleFile(e.target.files[0]));
     const drop = $('carga');
     drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
@@ -490,7 +641,6 @@
       document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.id !== `tab-${b.dataset.tab}`; });
     }));
 
-    $('filtro-alertas').addEventListener('change', renderAlertas);
     $('sel-hoja').addEventListener('change', (e) => {
       try { cargarHoja(e.target.value); } catch (err) { mostrarError(err); }
     });
@@ -499,52 +649,34 @@
       try { descargarHojaTrabajo(); } catch (err) { mostrarError(err); }
     });
     $('cfg-iniciales').addEventListener('change', saveConfig);
-    $('cfg-fecha').addEventListener('change', () => state.memoGroups.forEach((g, gi) => refreshGroup(gi)));
+    $('cfg-fecha').addEventListener('change', () => {
+      state.memoGroups.forEach((g, gi) => refreshMemo(gi));
+      state.devGroups.forEach((g, gi) => refreshDev(gi));
+    });
+    $('filtro-bandera').addEventListener('change', renderListado);
+    $('buscar').addEventListener('input', renderListado);
 
-    $('memos').addEventListener('input', (e) => {
-      const card = e.target.closest('[data-g]');
-      const f = e.target.dataset.f;
-      if (!card || !f) return;
-      const gi = Number(card.dataset.g);
-      const row = state.memoGroups[gi].rows[Number(e.target.dataset.r)];
-      if (f === 'incluir') row.incluir = e.target.checked;
-      else if (f === 'justificacion') row.justificacion = e.target.value;
-      else {
-        const apl = row.aplicaciones[Number(e.target.dataset.a)];
-        if (f === 'docto') apl.docto = e.target.value;
-        else apl.monto = e.target.value.trim() === '' ? '' : fmt.toNumber(e.target.value);
-      }
-      refreshGroup(gi);
+    eventosTarjetas('memos', 'memoGroups', refreshMemo, {
+      download: downloadMemo,
+      card: (gi) => {
+        document.querySelector(`#memos [data-g="${gi}"]`).outerHTML = memoCardHtml(state.memoGroups[gi], gi);
+        refreshMemo(gi);
+      },
     });
-    $('memos').addEventListener('click', (e) => {
-      const card = e.target.closest('[data-g]');
-      if (!card) return;
-      const gi = Number(card.dataset.g);
-      const g = state.memoGroups[gi];
-      const t = e.target.closest('button');
-      if (!t) return;
-      if (t.dataset.download !== undefined) downloadOne(gi);
-      else if (t.dataset.add !== undefined) {
-        g.rows[Number(t.dataset.add)].aplicaciones.push({ docto: '', monto: '' });
-        rerenderCard(gi);
-      } else if (t.dataset.del !== undefined) {
-        const [ri, ai] = t.dataset.del.split('-').map(Number);
-        g.rows[ri].aplicaciones.splice(ai, 1);
-        rerenderCard(gi);
-      }
-    });
-    $('btn-zip').addEventListener('click', downloadAll);
-    $('btn-dev').addEventListener('click', downloadDevoluciones);
+    eventosTarjetas('devoluciones', 'devGroups', refreshDev, { download: downloadDev, card: () => {} });
+    $('btn-zip').addEventListener('click', downloadMemos);
+    $('btn-zip-dev').addEventListener('click', downloadDevs);
 
-    $('historial').addEventListener('click', (e) => {
-      const t = e.target.closest('button');
-      if (!t) return;
-      if (t.dataset.redl) redownload(t.dataset.redl);
-      if (t.dataset.undo) undo(t.dataset.undo);
-    });
-    $('btn-hist-xlsx').addEventListener('click', exportHistorialXlsx);
-    $('btn-hist-backup').addEventListener('click', backupHistorial);
-    $('hist-import').addEventListener('change', (e) => { importHistorial(e.target.files[0]); e.target.value = ''; });
+    eventosHistorial('historial', 'historial', 'el memo');
+    eventosHistorial('historial-dev', 'historialDev', 'la devolución');
+    $('btn-hist-xlsx').addEventListener('click', () => exportarHistorialXlsx(state.historial, 'Historial memos', 'Historial_memos_IPE',
+      ['Generado', 'Fecha', 'N° memo', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Aplicaciones', 'Total aplicado', 'Queda pendiente'],
+      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta || e.fechaMemo, e.numero || '', e.empresa, e.rut, d.doc, d.nro, d.saldoInicial ?? d.saldo, d.aplicaciones, d.aplicado, d.remanente]));
+    $('btn-hist-dev-xlsx').addEventListener('click', () => exportarHistorialXlsx(state.historialDev, 'Historial devoluciones', 'Historial_devoluciones_IPE',
+      ['Generado', 'Fecha', 'N° oficio', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Devuelto', 'Queda pendiente', 'Banco', 'Tipo de cuenta', 'N° cuenta'],
+      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta, e.numero || '', e.empresa, e.rut, d.doc, d.nro, d.saldoInicial, d.devuelto, d.remanente, e.banco?.banco || '', e.banco?.tipoCuenta || '', e.banco?.numeroCuenta || '']));
+    document.querySelectorAll('[data-backup]').forEach((b) => b.addEventListener('click', backup));
+    document.querySelectorAll('[data-import]').forEach((i) => i.addEventListener('change', (e) => { importar(e.target.files[0]); e.target.value = ''; }));
   }
 
   init();

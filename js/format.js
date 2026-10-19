@@ -66,6 +66,22 @@
     return `${String(d.getDate()).padStart(2, '0')}.${MESES[d.getMonth()]}.${d.getFullYear()}`;
   }
 
+  /** Date -> "OCT.2026" (fecha del memo y de la devolución: solo mes y año; el día lo completa el usuario) */
+  function fechaMesAnio(d) {
+    return `${MESES[d.getMonth()]}.${d.getFullYear()}`;
+  }
+
+  /**
+   * Bandera según la fecha del ingreso anticipado, respecto del año en curso:
+   * roja = años anteriores, amarilla = primer semestre, verde = segundo semestre.
+   */
+  function bandera(fecha, hoy = new Date()) {
+    if (!fecha) return null;
+    if (fecha.getFullYear() < hoy.getFullYear()) return 'roja';
+    if (fecha.getFullYear() > hoy.getFullYear()) return 'verde';
+    return fecha.getMonth() < 6 ? 'amarilla' : 'verde';
+  }
+
   /** Date -> "14-10-2026" */
   function fechaCorta(d) {
     if (!d) return '';
@@ -76,5 +92,5 @@
     return Math.floor((hasta - desde) / 86400000);
   }
 
-  return { normalizeHeader, formatRut, formatCLP, toNumber, formatMontoLibre, parseFecha, fechaMemo, fechaCorta, diasEntre, miles };
+  return { normalizeHeader, formatRut, formatCLP, toNumber, formatMontoLibre, parseFecha, fechaMemo, fechaMesAnio, bandera, fechaCorta, diasEntre, miles };
 });

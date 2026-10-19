@@ -7,7 +7,8 @@
 })(typeof self !== 'undefined' ? self : this, function (fmt) {
   // clave interna -> encabezados aceptados (ya normalizados con fmt.normalizeHeader)
   const COLUMNS = {
-    estado: ['MISAPUNTES', 'MISAPUNTE', 'APUNTES', 'ESTADO'],
+    estado: ['MIGESTION', 'MISAPUNTES', 'MISAPUNTE', 'APUNTES', 'ESTADO'],
+    tipoIpe: ['TIPODEIPE', 'TIPOIPE'],
     responsable: ['RESPONSABLE'],
     concesion: ['CONCESION'],
     cf: ['CF'],
@@ -31,7 +32,7 @@
   };
   // MIS APUNTES no es obligatoria: sin ella se muestran resumen y alertas, pero no memos ni devoluciones.
   const REQUIRED = ['rut', 'dv', 'razon', 'doc', 'nro', 'saldo'];
-  const NOMBRES = { rut: 'COD. AUX.', dv: 'DV', razon: 'RAZÓN SOCIAL', doc: 'DOC.', nro: 'NRO.', saldo: 'SALDO', estado: 'MIS APUNTES' };
+  const NOMBRES = { rut: 'COD. AUX.', dv: 'DV', razon: 'RAZÓN SOCIAL', doc: 'DOC.', nro: 'NRO.', saldo: 'SALDO', estado: 'MI GESTION' };
 
   /** Estado normalizado de la columna MIS APUNTES. */
   function categoria(estado) {
@@ -106,7 +107,7 @@
     detectarNaturaleza(aoaInicio, h, idx);
     const faltan = REQUIRED.filter((k) => idx[k] === undefined).map((k) => NOMBRES[k]);
     // Columnas propias de la hoja de trabajo (no del mayor contable): sirven para desempatar.
-    const trabajo = ['estado', 'responsable', 'justificacion', 'gestion', 'naturaleza', 'doctoAplicar', 'montoAplicar']
+    const trabajo = ['estado', 'tipoIpe', 'responsable', 'justificacion', 'gestion', 'naturaleza', 'doctoAplicar', 'montoAplicar']
       .filter((k) => idx[k] !== undefined).length;
     return { valida: faltan.length === 0, tieneEstado: idx.estado !== undefined, trabajo, faltan };
   }
@@ -148,6 +149,7 @@
         fila: r + 1, // número de fila en Excel
         estado: str(get('estado')),
         categoria: categoria(get('estado')),
+        tipoIpe: str(get('tipoIpe')),
         responsable: str(get('responsable')),
         cf: str(get('cf')),
         rut,
@@ -177,6 +179,7 @@
       filaEncabezado: h,
       columnas: idx,
       tieneEstado: idx.estado !== undefined,
+      tieneTipo: idx.tipoIpe !== undefined,
       tieneColumnasAplicar: idx.doctoAplicar !== undefined && idx.montoAplicar !== undefined,
     };
   }
@@ -199,9 +202,50 @@
       if (previo) exactos++;
       else if ((previo = porDoc.get(claveDoc(r)))) porDocumento++;
       if (!previo) return { ...r, estadoCopiado: false };
-      return { ...r, estado: previo.estado, categoria: categoria(previo.estado), estadoCopiado: true };
+      return { ...r, estado: previo.estado, categoria: categoria(previo.estado), tipoIpe: r.tipoIpe || previo.tipoIpe || '', estadoCopiado: true };
     });
     return { rows, exactos, porDocumento, sinCoincidencia: rows.length - exactos - porDocumento };
+  }
+
+  /**
+   * Cuando un mismo IPE (empresa + documento + número) tiene movimientos DEUDOR y ACREEDOR, se muestra
+   * un solo registro con el resultado: suma ACREEDOR menos suma DEUDOR. Los datos (estado, tipo,
+   * justificación, comprobante, fecha) se toman del primer registro ACREEDOR.
+   */
+  function consolidar(rows) {
+    const grupos = new Map();
+    for (const r of rows) {
+      const k = `${r.rut}-${r.dv}|${r.doc}|${r.nro}`;
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push(r);
+    }
+    const salida = [];
+    const hechos = new Set();
+    for (const r of rows) {
+      const k = `${r.rut}-${r.dv}|${r.doc}|${r.nro}`;
+      const g = grupos.get(k);
+      const acreedores = g.filter((x) => x.naturaleza !== 'DEUDOR');
+      const deudores = g.filter((x) => x.naturaleza === 'DEUDOR');
+      if (!deudores.length || !acreedores.length) { salida.push(r); continue; }
+      if (hechos.has(k)) continue;
+      hechos.add(k);
+      const base = acreedores[0];
+      const primero = (campo) => (acreedores.find((x) => x[campo]) || g.find((x) => x[campo]) || base)[campo];
+      const neto = acreedores.reduce((s, x) => s + x.saldo, 0) - deudores.reduce((s, x) => s + x.saldo, 0);
+      salida.push({
+        ...base,
+        estado: primero('estado'),
+        categoria: categoria(primero('estado')),
+        tipoIpe: primero('tipoIpe'),
+        justificacion: primero('justificacion'),
+        gestion: primero('gestion'),
+        saldo: Math.abs(neto),
+        saldoNeto: neto,
+        naturaleza: neto < 0 ? 'DEUDOR' : 'ACREEDOR',
+        consolidado: { filas: g.map((x) => x.fila), acreedor: neto + deudores.reduce((s, x) => s + x.saldo, 0), deudor: deudores.reduce((s, x) => s + x.saldo, 0) },
+      });
+    }
+    return salida;
   }
 
   /** Último paso numerado de "Gestión realizada" (ej. "19) Correo enviado..."). */
@@ -212,5 +256,5 @@
     return partes[partes.length - 1].replace(/^\d{1,2}\s?\)\s?/, '');
   }
 
-  return { parseAoa, analizarHoja, elegirHoja, copiarEstados, categoria, ultimaGestion, COLUMNS };
+  return { parseAoa, analizarHoja, elegirHoja, copiarEstados, consolidar, categoria, ultimaGestion, COLUMNS };
 });

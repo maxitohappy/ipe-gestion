@@ -1,16 +1,17 @@
 // Memos de aplicación: agrupa los IPE con estado APLICAR por empresa y rellena la plantilla Word.
 // Cada IPE puede aplicarse a varios documentos; el saldo se va descontando en cada aplicación y,
 // si queda remanente, el memo agrega una "Nota: Diferencia de ..." (formato memo Nº 176).
+// Si el IPE ya tuvo memos (historial), se parte del saldo pendiente y el MOTIVO lo menciona ("Asimismo, ...").
 (function (root, factory) {
-  const fmt = typeof require === 'function' ? require('./format.js') : root.IPE.format;
-  const api = factory(fmt);
+  const req = typeof require === 'function';
+  const fmt = req ? require('./format.js') : root.IPE.format;
+  const glosas = req ? require('./glosas.js') : root.IPE.glosas;
+  const movimientos = req ? require('./movimientos.js') : root.IPE.movimientos;
+  const api = factory(fmt, glosas, movimientos);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.IPE = root.IPE || {}).memo = api;
-})(typeof self !== 'undefined' ? self : this, function (fmt) {
-  /** Identificador estable de un IPE (empresa + documento + comprobante). */
-  function rowKey(r) {
-    return `${r.rut}-${r.dv}|${r.doc}|${r.nro}|${r.comprob}`;
-  }
+})(typeof self !== 'undefined' ? self : this, function (fmt, glosas, movimientos) {
+  const { rowKey } = movimientos;
 
   function groupByEmpresa(rows) {
     const map = new Map();
@@ -23,7 +24,7 @@
   }
 
   /**
-   * Aplicaciones iniciales desde las columnas del Excel. Admite varias separadas por ";" o salto de línea:
+   * Aplicaciones iniciales desde las columnas del Excel (opcionales). Admite varias separadas por ";":
    * DOCTO A APLICAR "Pagar FEE 263576; Pagar FEE 262729" y MONTO A APLICAR "2005; 2327".
    */
   function parseAplicaciones(docto, monto) {
@@ -36,73 +37,65 @@
     return out;
   }
 
+  /** Texto inicial del MOTIVO / OBSERVACIONES: glosa del TIPO DE IPE o, si no hay, la justificación del Excel. */
+  function textoInicial(r) {
+    const g = glosas.porTipo(r.tipoIpe)[0];
+    return { glosaId: g ? g.id : '', texto: g ? g.texto : r.justificacion };
+  }
+
   /**
-   * Índice del historial: por cada IPE, el registro de su memo más reciente
-   * ({ saldo, aplicado, remanente, fechaMemo, generado }).
+   * Prepara los IPE de una categoría con saldo pendiente > 0, agrupados por empresa.
+   * Compartido por memos (APLICAR) y devoluciones (DEVOLVER).
    */
-  function indiceHistorial(historial) {
-    const idx = new Map();
-    for (const e of historial) {
-      for (const d of e.documentos) {
-        const prev = idx.get(d.key);
-        if (!prev || e.generado > prev.generado) idx.set(d.key, { ...d, fechaMemo: e.fechaMemo, generado: e.generado });
-      }
+  function prepararGrupos(rows, categoria, idx, extra) {
+    const pendientes = [];
+    for (const r of rows) {
+      if (r.categoria !== categoria || r.naturaleza === 'DEUDOR') continue;
+      const { pendiente, previos } = movimientos.pendiente(r, idx);
+      if (pendiente <= 0) continue;
+      const { glosaId, texto } = textoInicial(r);
+      pendientes.push({ ...r, key: rowKey(r), incluir: true, saldoInicial: pendiente, previos, glosaId, texto, ...extra(r, pendiente) });
     }
-    return idx;
+    return groupByEmpresa(pendientes);
   }
 
-  /**
-   * Un IPE con memo previo queda oculto solo si su saldo no cambió (Contabilidad aún no procesa el memo).
-   * Si el saldo cambió (se aplicó una parte, o el cliente generó más saldo), vuelve a quedar pendiente.
-   */
-  function ocultoPorHistorial(r, previo) {
-    return Boolean(previo) && Math.round(previo.saldo) === Math.round(r.saldo);
-  }
-
-  /** Grupos de memo: empresas con filas APLICAR pendientes. `idx` es el índice del historial. */
+  /** Grupos de memo: empresas con IPE en APLICAR y saldo pendiente. `idx` es movimientos.indice(...). */
   function buildGroups(rows, idx = new Map()) {
-    const pendientes = rows.filter((r) => r.categoria === 'APLICAR' && !ocultoPorHistorial(r, idx.get(rowKey(r))));
-    return groupByEmpresa(pendientes)
-      .map((g) => ({
-        ...g,
-        rows: g.rows.map((r) => ({
-          ...r,
-          key: rowKey(r),
-          previo: idx.get(rowKey(r)) || null,
-          incluir: r.naturaleza !== 'DEUDOR',
-          aplicaciones: parseAplicaciones(r.doctoAplicar, r.montoAplicar),
-        })),
-      }))
-      // Si solo quedan filas DEUDOR (aplicaciones ya registradas), no hay memo pendiente.
-      .filter((g) => g.rows.some((r) => r.naturaleza !== 'DEUDOR'));
+    return prepararGrupos(rows, 'APLICAR', idx, (r) => ({ aplicaciones: parseAplicaciones(r.doctoAplicar, r.montoAplicar) }));
   }
 
-  /** Saldo antes/después de cada aplicación y remanente final. */
+  /** Saldo antes/después de cada aplicación y remanente final, partiendo del saldo pendiente. */
   function calcular(r) {
-    let saldo = r.saldo;
+    let saldo = r.saldoInicial ?? r.saldo;
+    const inicio = saldo;
     const pasos = r.aplicaciones.map((a) => {
       const monto = Number(a.monto) || 0;
       const paso = { docto: a.docto, monto, saldoAntes: saldo, saldoDespues: saldo - monto };
       saldo -= monto;
       return paso;
     });
-    return { pasos, aplicado: r.saldo - saldo, remanente: saldo };
+    return { pasos, aplicado: inicio - saldo, remanente: saldo };
+  }
+
+  /** MOTIVO completo: texto del tipo de IPE + frases de movimientos previos. */
+  function textoCompleto(r) {
+    return [r.texto, ...movimientos.frasesAsimismo(r.previos || [])].filter(Boolean).join(' ');
   }
 
   function warnings(group) {
     const w = [];
     const sel = group.rows.filter((r) => r.incluir);
     if (!sel.length) w.push('No hay documentos seleccionados.');
-    if (group.rows.some((r) => r.naturaleza === 'DEUDOR'))
-      w.push('Tiene filas DEUDOR (aplicaciones ya registradas): revisar si corresponde incluirlas.');
     for (const r of sel) {
       const id = `${r.doc} ${r.nro}`;
       const { remanente } = calcular(r);
-      if (!r.justificacion) w.push(`${id}: sin justificación (el MOTIVO quedará solo con el documento).`);
+      if (!r.texto) w.push(`${id}: sin MOTIVO (elige el TIPO DE IPE o escribe la justificación).`);
+      const faltan = glosas.pendientes(r.texto);
+      if (faltan) w.push(`${id}: el MOTIVO tiene ${faltan} dato(s) por completar (<completar por el usuario>).`);
       if (!r.aplicaciones.length) w.push(`${id}: no tiene documentos a aplicar.`);
       if (r.aplicaciones.some((a) => !a.docto || a.monto === '' || !(Number(a.monto) > 0)))
         w.push(`${id}: hay una aplicación sin documento o sin monto.`);
-      if (remanente < 0) w.push(`${id}: lo aplicado supera el saldo en ${fmt.formatCLP(-remanente)}.`);
+      if (remanente < 0) w.push(`${id}: lo aplicado supera el saldo pendiente en ${fmt.formatCLP(-remanente)}.`);
     }
     return w;
   }
@@ -115,7 +108,7 @@
     for (const r of sel) {
       const { pasos, remanente } = calcular(r);
       if (!pasos.length) {
-        items.push({ doc: r.doc, nro: r.nro, monto: fmt.formatCLP(r.saldo), docto_aplicar: '', monto_aplicar: '' });
+        items.push({ doc: r.doc, nro: r.nro, monto: fmt.formatCLP(r.saldoInicial ?? r.saldo), docto_aplicar: '', monto_aplicar: '' });
         continue;
       }
       for (const p of pasos) {
@@ -130,36 +123,52 @@
       if (remanente > 0) notas.push({ doc: r.doc, nro: r.nro, remanente: fmt.formatCLP(remanente) });
     }
     return {
-      fecha: fmt.fechaMemo(opts.fecha),
+      fecha: fmt.fechaMesAnio(opts.fecha),
       razon_social: group.razon,
       rut: group.rutFmt,
       iniciales: opts.iniciales || '',
-      motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: r.justificacion })),
+      motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: textoCompleto(r) })),
       items,
       notas,
     };
   }
 
-  function fileName(group) {
+  /**
+   * Nombre del .docx: prefijo, empresa, RUT, fecha del documento y hora de generación
+   * (dos memos de la misma empresa en el mismo día no quedan con igual nombre).
+   */
+  function nombreArchivo(prefijo, group, fecha = new Date(), ahora = new Date()) {
     const base = group.razon.normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
-    return `MEMO_IPE_${base}_${group.rut}.docx`;
+    const dos = (n) => String(n).padStart(2, '0');
+    const f = `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
+    return `${prefijo}_${base}_${group.rut}_${f}_${dos(ahora.getHours())}${dos(ahora.getMinutes())}${dos(ahora.getSeconds())}.docx`;
   }
 
-  /** Registro para el historial: guarda lo necesario para volver a descargar el memo. */
-  function historialEntry(group, data, generadoEn) {
+  function fileName(group, fecha) {
+    return nombreArchivo('MEMO_IPE', group, fecha);
+  }
+
+  /** Registro para el historial de memos: guarda lo necesario para volver a descargarlo y calcular saldos. */
+  function historialEntry(group, data, generadoEn, opts) {
     const sel = group.rows.filter((r) => r.incluir);
     return {
       id: `${generadoEn.getTime()}-${group.key}`,
+      tipo: 'memo',
       generado: generadoEn.toISOString(),
       fechaMemo: data.fecha,
+      fechaCompleta: fmt.fechaMemo(opts.fecha),
+      numero: '',
       empresa: group.razon,
       rut: group.rutFmt,
-      archivo: fileName(group),
+      archivo: fileName(group, opts.fecha),
       documentos: sel.map((r) => {
         const { aplicado, remanente } = calcular(r);
-        return { key: r.key, doc: r.doc, nro: r.nro, saldo: r.saldo, aplicado, remanente,
-          aplicaciones: r.aplicaciones.map((a) => `${a.docto} (${fmt.formatCLP(Number(a.monto) || 0)})`).join('; ') };
+        return {
+          key: r.key, doc: r.doc, nro: r.nro,
+          saldo: r.saldo, saldoExcel: r.saldo, saldoInicial: r.saldoInicial ?? r.saldo, aplicado, remanente,
+          aplicaciones: r.aplicaciones.map((a) => `${a.docto} (${fmt.formatCLP(Number(a.monto) || 0)})`).join('; '),
+        };
       }),
       data,
     };
@@ -176,5 +185,8 @@
     return doc.getZip();
   }
 
-  return { rowKey, indiceHistorial, ocultoPorHistorial, buildGroups, groupByEmpresa, parseAplicaciones, calcular, warnings, memoData, fileName, historialEntry, render };
+  return {
+    rowKey, groupByEmpresa, parseAplicaciones, textoInicial, prepararGrupos, buildGroups, calcular, textoCompleto,
+    warnings, memoData, nombreArchivo, fileName, historialEntry, render,
+  };
 });
