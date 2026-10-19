@@ -28,6 +28,8 @@ const AOA = [
   ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
 ];
 const HOY = new Date(2026, 9, 19);
+// En el Word los montos llevan espacio no separable entre "$" y la cifra.
+const sp = (v) => JSON.parse(JSON.stringify(v).replace(/\u00a0/g, ' '));
 const leer = () => parser.consolidar(parser.parseAoa(AOA).rows);
 
 test('formato: RUT, montos, fechas y banderas', () => {
@@ -99,7 +101,7 @@ test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que d
   const data = memo.memoData(uno, { fecha, iniciales: 'AB/cd' });
   assert.equal(data.fecha, 'OCT.2026');
   assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 100', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 20' }]);
-  assert.deepEqual(data.notas, [{ doc: 'EFE', nro: '100', remanente: '$ 80' }]);
+  assert.deepEqual(sp(data.notas), [{ doc: 'EFE', nro: '100', remanente: '$ 80' }]);
   const historial = [memo.historialEntry(uno, data, new Date(2026, 9, 14, 10), { fecha })];
   historial[0].numero = '310';
 
@@ -110,7 +112,7 @@ test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que d
   uno.rows[0].aplicaciones = [{ docto: 'Pagar FEE 2', monto: 10 }];
   const data2 = memo.memoData(uno, { fecha: new Date(2026, 9, 20) });
   const texto2 = data2.motivos[0].justificacion.map((p) => p.t).join('');
-  assert.match(texto2, /Asimismo, con fecha \[día\]\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha \[día\]\.OCT\.2026\.$/);
+  assert.match(texto2, /Asimismo, con fecha \[día\]\.OCT\.2026, se aplicaron \$\s20, según MEMO N°310, de fecha \[día\]\.OCT\.2026\.$/);
   assert.equal(data2.motivos[0].justificacion.filter((p) => p.t === '[día]').length, 2);
   historial[0].numero = '';
   const sinNumero = memo.memoData(memo.buildGroups(rows, movimientos.indice(historial, [])).find((g) => g.razon === 'EMPRESA UNO SPA'), { fecha: HOY });
@@ -161,7 +163,7 @@ test('devolución: observaciones por TIPO DE IPE, datos bancarios, devolución p
   const idx = movimientos.indice([], [entry]);
   const [pend] = devoluciones.buildGroups(rows, idx);
   assert.equal(pend.rows[0].saldoInicial, 10);
-  assert.match(memo.textoCompleto(pend.rows[0]), /se devolvieron \$ 30, según OF\. \(O\) N°\[\[N° oficio\]\]/);
+  assert.match(memo.textoCompleto(pend.rows[0]), /se devolvieron \$\s30, según OF\. \(O\) N°\[\[N° oficio\]\]/);
 });
 
 test('devolución: sin datos bancarios deja marcas para completar', () => {
@@ -219,6 +221,20 @@ test('js/plantilla.js corresponde a las plantillas .docx (ejecutar scripts/embed
     const b64 = js.match(new RegExp(`${nombre} = "([^"]+)"`))[1];
     assert.ok(Buffer.from(b64, 'base64').equals(fs.readFileSync(path.join(__dirname, '../templates', archivo))), archivo);
   }
+});
+
+test('frase "Asimismo" con varios movimientos previos', () => {
+  const mov = (tipo, monto, fecha) => ({ tipo, monto, fecha, numero: '' });
+  assert.deepEqual(movimientos.frasesAsimismo([]), []);
+  assert.deepEqual(sp(movimientos.frasesAsimismo([mov('memo', 20000, '19.OCT.2026'), mov('memo', 10000, '20.OCT.2026')])), [
+    'Asimismo, se aplicaron $ 30.000 en total, según el siguiente detalle: $ 20.000 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026; '
+    + 'y $ 10.000 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026.',
+  ]);
+  const tres = sp(movimientos.frasesAsimismo([mov('memo', 1, '01.SEP.2026'), mov('memo', 2, '02.OCT.2026'), mov('memo', 3, '03.OCT.2026')]))[0];
+  assert.match(tres, /^Asimismo, se aplicaron \$ 6 en total, según el siguiente detalle: \$ 1 .*SEP\.2026; \$ 2 .*; y \$ 3 .*OCT\.2026\.$/);
+  assert.equal(sp(movimientos.frasesAsimismo([mov('memo', 20, '19.OCT.2026'), mov('devolucion', 10, '20.OCT.2026')]))[0],
+    'Asimismo, este ingreso registra los siguientes movimientos: aplicación de $ 20 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026; '
+    + 'y devolución de $ 10 según OF. (O) N°[[N° oficio]] de fecha [[día]].OCT.2026.');
 });
 
 test('ultimaGestion toma el último paso numerado', () => {

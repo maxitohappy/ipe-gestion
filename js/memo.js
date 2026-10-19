@@ -120,7 +120,7 @@
           monto_aplicar: p.monto ? fmt.formatCLP(p.monto) : '',
         });
       }
-      if (remanente > 0) notas.push({ doc: r.doc, nro: r.nro, remanente: fmt.formatCLP(remanente) });
+      if (remanente > 0) notas.push({ doc: r.doc, nro: r.nro, remanente: fmt.formatCLP(remanente).replace(' ', '\u00A0') });
     }
     return {
       fecha: fmt.fechaMesAnio(opts.fecha),

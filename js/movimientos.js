@@ -50,22 +50,49 @@
     return { pendiente: r.saldo - descontado, previos, descontado };
   }
 
+  /** Fecha del documento con el día por completar en el Word: "[día].OCT.2026". */
+  function fechaSinDia(m) {
+    const mesAnio = String(m.fecha || '').replace(/^\d{1,2}\./, '');
+    return mesAnio ? `[[día]].${mesAnio}` : '[[fecha]]';
+  }
+
+  const documento = (m) => (m.tipo === 'devolucion'
+    ? `OF. (O) N°${m.numero || '[[N° oficio]]'}`
+    : `MEMO N°${m.numero || '[[N° memo]]'}`);
+
+  // Monto con espacio no separable: en el Word "$" no queda en una línea y la cifra en la siguiente.
+  const monto = (n) => fmt.formatCLP(n).replace(' ', '\u00A0');
+
+  /** "a; b; y c" */
+  function enumerar(items) {
+    return items.length < 2 ? items.join('') : `${items.slice(0, -1).join('; ')}; y ${items[items.length - 1]}`;
+  }
+
   /**
-   * Frases que complementan el MOTIVO / OBSERVACIONES con los movimientos previos del IPE:
-   * "Asimismo, con fecha [día].OCT.2026, se aplicaron $20, según MEMO N°[N° memo], de fecha [día].OCT.2026."
-   * El N° del memo u oficio se completa en el Word (queda resaltado).
+   * Frase que complementa el MOTIVO / OBSERVACIONES con los movimientos previos del IPE. El N° del memo u
+   * oficio y el día se completan en el Word (quedan resaltados).
+   * - Un movimiento: "Asimismo, con fecha [día].OCT.2026, se aplicaron $ 20, según MEMO N°[N° memo], de fecha [día].OCT.2026."
+   * - Varios del mismo tipo: "Asimismo, se aplicaron $ 30 en total, según el siguiente detalle:
+   *   $ 20 según MEMO N°[N° memo] de fecha [día].OCT.2026; y $ 10 según MEMO N°[N° memo] de fecha [día].OCT.2026."
+   * - Aplicaciones y devoluciones: "Asimismo, este ingreso registra los siguientes movimientos:
+   *   aplicación de $ 20 según MEMO N°… de fecha …; y devolución de $ 10 según OF. (O) N°… de fecha …."
    */
   function frasesAsimismo(previos) {
-    return previos
-      .filter((m) => m.monto > 0)
-      .map((m) => {
-        // El día queda por completar en el Word; se indican solo mes y año: "[día].OCT.2026".
-        const mesAnio = String(m.fecha || '').replace(/^\d{1,2}\./, '');
-        const fecha = mesAnio ? `[[día]].${mesAnio}` : '[[fecha]]';
-        return m.tipo === 'devolucion'
-          ? `Asimismo, con fecha ${fecha}, se devolvieron ${fmt.formatCLP(m.monto)}, según OF. (O) N°${m.numero || '[[N° oficio]]'}, de fecha ${fecha}.`
-          : `Asimismo, con fecha ${fecha}, se aplicaron ${fmt.formatCLP(m.monto)}, según MEMO N°${m.numero || '[[N° memo]]'}, de fecha ${fecha}.`;
-      });
+    const movs = previos.filter((m) => m.monto > 0);
+    if (!movs.length) return [];
+    if (movs.length === 1) {
+      const [m] = movs;
+      const verbo = m.tipo === 'devolucion' ? 'se devolvieron' : 'se aplicaron';
+      return [`Asimismo, con fecha ${fechaSinDia(m)}, ${verbo} ${monto(m.monto)}, según ${documento(m)}, de fecha ${fechaSinDia(m)}.`];
+    }
+    const detalle = (m, conTipo) => `${conTipo ? (m.tipo === 'devolucion' ? 'devolución de ' : 'aplicación de ') : ''}${monto(m.monto)} según ${documento(m)} de fecha ${fechaSinDia(m)}`;
+    const tipos = new Set(movs.map((m) => m.tipo));
+    if (tipos.size > 1) {
+      return [`Asimismo, este ingreso registra los siguientes movimientos: ${enumerar(movs.map((m) => detalle(m, true)))}.`];
+    }
+    const total = movs.reduce((s, m) => s + m.monto, 0);
+    const verbo = movs[0].tipo === 'devolucion' ? 'se devolvieron' : 'se aplicaron';
+    return [`Asimismo, ${verbo} ${monto(total)} en total, según el siguiente detalle: ${enumerar(movs.map((m) => detalle(m, false)))}.`];
   }
 
   return { rowKey, indice, pendiente, frasesAsimismo };
