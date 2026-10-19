@@ -10,3 +10,6 @@ node_modules/
 
 # Script de construcción de plantilla: contiene textos del memo original (solo local)
 tools/
+
+# Versión sin internet generada al publicar (scripts/build_offline.py)
+descargas/

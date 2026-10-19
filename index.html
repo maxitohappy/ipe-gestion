@@ -4,20 +4,54 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261020f">
+  <link rel="stylesheet" href="css/styles.css?v=20261021">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
-      <h1>Gestión IPE</h1>
+      <div class="row-between titulo">
+        <h1>Gestión IPE</h1>
+        <div id="barra-usuario" class="actions usuario" hidden>
+          <span id="usuario-correo" class="muted"></span>
+          <button id="btn-cambiar-clave" class="link">Cambiar contraseña</button>
+          <button id="btn-salir" class="link">Cerrar sesión</button>
+        </div>
+      </div>
       <p class="sub offline-info">
-        <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador).</span>
-        <span id="modo-web"><a href="https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip">Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
+        <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador; el historial se guarda solo aquí).</span>
+        <span id="modo-web" hidden><a href="descargas/ipe-gestion-sin-internet.zip" download>Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
       </p>
     </div>
   </header>
 
   <main class="wrap">
+    <section id="acceso" class="card acceso" hidden>
+      <h2>Iniciar sesión</h2>
+      <form id="form-ingreso" class="form-acceso">
+        <label>Correo<input type="email" id="ing-correo" autocomplete="username" required></label>
+        <label>Contraseña<input type="password" id="ing-clave" autocomplete="current-password" required></label>
+        <button type="submit" class="primary">Ingresar</button>
+      </form>
+      <button id="btn-olvide" class="link">¿Olvidaste tu contraseña?</button>
+      <p id="acceso-msg" class="msg" role="status"></p>
+      <p class="muted">El acceso lo entrega el administrador. Si es tu primer ingreso, usa la contraseña temporal que recibiste.</p>
+    </section>
+
+    <section id="cambio-clave" class="card acceso" hidden>
+      <h2>Crea tu contraseña</h2>
+      <p class="muted" id="cambio-clave-intro">Por seguridad, reemplaza la contraseña temporal por una propia (mínimo 8 caracteres).</p>
+      <form id="form-clave" class="form-acceso">
+        <label>Contraseña actual (temporal)<input type="password" id="clave-actual" autocomplete="current-password" required></label>
+        <label>Nueva contraseña<input type="password" id="clave-nueva" autocomplete="new-password" minlength="8" required></label>
+        <label>Repite la nueva contraseña<input type="password" id="clave-repetir" autocomplete="new-password" minlength="8" required></label>
+        <div class="actions">
+          <button type="submit" class="primary">Guardar contraseña</button>
+          <button type="button" id="btn-cancelar-clave" class="secondary" hidden>Cancelar</button>
+        </div>
+      </form>
+      <p id="clave-msg" class="msg" role="status"></p>
+    </section>
+
     <section id="carga" class="card drop">
       <label for="archivo" class="drop-label">
         <strong>Selecciona o arrastra el Excel IPE del mes</strong>
@@ -121,18 +155,23 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261020f"></script>
-  <script src="vendor/pizzip.min.js?v=20261020f"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261020f"></script>
-  <script src="vendor/FileSaver.min.js?v=20261020f"></script>
-  <script src="js/format.js?v=20261020f"></script>
-  <script src="js/glosas.js?v=20261020f"></script>
-  <script src="js/movimientos.js?v=20261020f"></script>
-  <script src="js/parser.js?v=20261020f"></script>
-  <script src="js/memo.js?v=20261020f"></script>
-  <script src="js/devoluciones.js?v=20261020f"></script>
-  <script src="js/resumen.js?v=20261020f"></script>
-  <script src="js/plantilla.js?v=20261020f"></script>
-  <script src="js/app.js?v=20261020f"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261021"></script>
+  <script src="vendor/pizzip.min.js?v=20261021"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261021"></script>
+  <script src="vendor/FileSaver.min.js?v=20261021"></script>
+  <script src="vendor/firebase-app-compat.js?v=20261021"></script>
+  <script src="vendor/firebase-auth-compat.js?v=20261021"></script>
+  <script src="vendor/firebase-firestore-compat.js?v=20261021"></script>
+  <script src="js/firebase-config.js?v=20261021"></script>
+  <script src="js/nube.js?v=20261021"></script>
+  <script src="js/format.js?v=20261021"></script>
+  <script src="js/glosas.js?v=20261021"></script>
+  <script src="js/movimientos.js?v=20261021"></script>
+  <script src="js/parser.js?v=20261021"></script>
+  <script src="js/memo.js?v=20261021"></script>
+  <script src="js/devoluciones.js?v=20261021"></script>
+  <script src="js/resumen.js?v=20261021"></script>
+  <script src="js/plantilla.js?v=20261021"></script>
+  <script src="js/app.js?v=20261021"></script>
 </body>
 </html>

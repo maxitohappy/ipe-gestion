@@ -1,0 +1,30 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      ".firebaserc",
+      "**/.*",
+      "**/node_modules/**",
+      "tools/**",
+      "scripts/**",
+      "tests/**",
+      "templates/**",
+      "**/*.md"
+    ],
+    "headers": [
+      {
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/index.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}

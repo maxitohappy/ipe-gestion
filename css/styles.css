@@ -123,3 +123,13 @@ input[type="search"] { font: inherit; color: var(--text); background: var(--surf
 .banco select, .banco input[type="text"] { width: 100%; }
 .banco input[data-b="bancoOtro"] { margin-top: 6px; }
 .card[hidden] { display: none; }
+
+/* Acceso: inicio de sesión y cambio de contraseña */
+.titulo { margin-bottom: 0; }
+.usuario { font-size: 13px; align-items: center; }
+.acceso { max-width: 440px; margin: 24px auto; }
+.form-acceso { display: grid; gap: 10px; margin-bottom: 8px; }
+.form-acceso label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.form-acceso input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.msg { min-height: 1.2em; color: var(--danger); font-size: 13px; }
+.msg.ok { color: var(--ok); }
