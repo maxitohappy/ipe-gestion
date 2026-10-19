@@ -1,6 +1,6 @@
 // Interfaz: carga del Excel, pestañas, documentos Word (memos y devoluciones) e historiales.
 (function () {
-  const { format: fmt, parser, memo, devoluciones, resumen, glosas, movimientos } = window.IPE;
+  const { format: fmt, parser, memo, devoluciones, resumen, movimientos } = window.IPE;
   const $ = (id) => document.getElementById(id);
   const CONFIG_KEY = 'ipe-config';
   const HIST_KEY = 'ipe-historial';
@@ -202,10 +202,7 @@
       ['Empresas en Devoluciones', r.empresasDevoluciones],
       ['Empresas pendientes', r.empresasPendientes],
     ];
-    $('kpis').innerHTML = kpis.map(([l, v]) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('')
-      + `<div class="kpi"><div class="l">Banderas</div><div class="v flags-kpi">`
-      + ['roja', 'amarilla', 'verde'].map((b) => `<span title="${BANDERAS[b]}"><span class="flag ${b}"></span> ${r.banderas[b]}</span>`).join('')
-      + '</div></div>';
+    $('kpis').innerHTML = kpis.map(([l, v]) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join('');
     renderListado();
   }
 
@@ -215,36 +212,39 @@
     const lista = (state.listado || []).filter((r) => (!fb || r.bandera === fb)
       && (!q || `${r.razon} ${r.rutFmt} ${r.rut} ${r.doc} ${r.nro}`.toLowerCase().includes(q)));
     $('listado').innerHTML = lista.length
-      ? `<table><thead><tr><th></th><th>Empresa</th><th>RUT</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo</th><th>MI GESTION</th><th>TIPO DE IPE</th></tr></thead><tbody>
-        ${lista.map((r) => `<tr class="${r.naturaleza === 'DEUDOR' ? 'deudor' : ''}">
-          <td>${flagHtml(r.fecha)}</td><td>${esc(r.razon)}</td><td>${esc(r.rutFmt)}</td><td>${esc(r.doc)}</td><td>${esc(r.nro)}</td>
-          <td>${esc(fmt.fechaCorta(r.fecha))}</td>
-          <td class="n">${clp(r.saldo)}${r.consolidado ? `<div class="prev" title="Saldo acreedor menos saldo deudor del mismo IPE">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
-          <td>${esc(r.estado)}</td><td>${esc(r.tipoIpe)}</td></tr>`).join('')}
+      ? `<table><thead><tr><th class="n">N°</th><th>MI GESTION</th><th>Categoría</th><th>Empresa</th><th>RUT</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo</th></tr></thead><tbody>
+        ${lista.map((r, i) => `<tr class="${r.naturaleza === 'DEUDOR' ? 'deudor' : ''}">
+          <td class="n">${i + 1}</td><td>${esc(r.estado)}</td><td>${flagHtml(r.fecha)}</td><td>${esc(r.razon)}</td>
+          <td class="nowrap">${esc(r.rutFmt)}</td><td>${esc(r.doc)}</td><td>${esc(r.nro)}</td>
+          <td class="nowrap">${esc(fmt.fechaCorta(r.fecha))}</td>
+          <td class="n">${clp(r.saldo)}${r.consolidado ? `<div class="prev" title="Saldo acreedor menos saldo deudor del mismo IPE">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td></tr>`).join('')}
         </tbody></table>`
-      : '<p class="muted">No hay ingresos anticipados con ese filtro.</p>';
+      : '<p class="muted">No hay ingresos anticipados de empresas pendientes con ese filtro.</p>';
   }
 
   // ---------- piezas comunes de memos y devoluciones ----------
-  function tipoSelect(r, ri) {
-    const opciones = glosas.GLOSAS.map((g) => `<option value="${g.id}" ${g.id === r.glosaId ? 'selected' : ''}>${esc(glosas.etiqueta(g))}</option>`).join('');
-    const aviso = r.tipoIpe && !glosas.porTipo(r.tipoIpe).length ? `<div class="prev">En el Excel: "${esc(r.tipoIpe)}" (no está en las glosas)</div>` : '';
-    return `<select data-f="glosa" data-r="${ri}" aria-label="Tipo de IPE"><option value="">(sin tipo: usar justificación del Excel)</option>${opciones}</select>${aviso}`;
+  /** TIPO DE IPE tal como viene en la planilla (no editable). */
+  function tipoHtml(r) {
+    if (!r.tipoIpe) return '<span class="muted">vacío</span>';
+    const aviso = r.glosaId ? '' : '<div class="prev">no está en las glosas: el Word usa la justificación del Excel</div>';
+    return `${esc(r.tipoIpe)}${aviso}`;
   }
 
-  function previosHtml(r) {
-    if (!r.previos || !r.previos.length) return '';
-    return `<div class="prev">${r.previos.filter((m) => m.monto > 0).map((m) =>
-      `${m.tipo === 'devolucion' ? 'Devuelto' : 'Aplicado'} ${clp(m.monto)} · ${m.tipo === 'devolucion' ? 'OF.' : 'MEMO'} N°${esc(m.numero || 'XX')} del ${esc(m.fecha)}`).join('<br>')}</div>`;
-  }
+  const netoHtml = (r) => (r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : '');
 
-  /** Cambio de TIPO DE IPE: reemplaza el texto por la glosa elegida (o por la justificación del Excel). */
-  function aplicarGlosa(row, glosaId, card, ri) {
-    row.glosaId = glosaId;
-    const g = glosas.porId(glosaId);
-    row.texto = g ? g.texto : row.justificacion;
-    const ta = card.querySelector(`textarea[data-f="texto"][data-r="${ri}"]`);
-    if (ta) ta.value = row.texto;
+  /** Buscador por RUT o empresa: oculta las tarjetas que no coinciden. */
+  function filtrarTarjetas(contenedor, grupos, q) {
+    const t = q.trim().toLowerCase();
+    const digitos = t.replace(/[^0-9k]/g, '');
+    let visibles = 0;
+    document.querySelectorAll(`#${contenedor} [data-g]`).forEach((card) => {
+      const g = state[grupos][Number(card.dataset.g)];
+      const rut = `${g.rut}${g.dv}`.toLowerCase();
+      const ok = !t || g.razon.toLowerCase().includes(t) || g.rutFmt.toLowerCase().includes(t) || (digitos.length >= 3 && rut.includes(digitos));
+      card.hidden = !ok;
+      if (ok) visibles += 1;
+    });
+    return visibles;
   }
 
   function alertError(err) {
@@ -276,6 +276,7 @@
     $('btn-zip').disabled = !groups.length;
     $('memos').innerHTML = groups.map((g, gi) => memoCardHtml(g, gi)).join('') || '<p class="muted">No hay memos pendientes.</p>';
     groups.forEach((g, gi) => refreshMemo(gi));
+    filtrarTarjetas('memos', 'memoGroups', $('buscar-memos').value);
   }
 
   function montoInput(v) {
@@ -291,15 +292,15 @@
         </div>
         <div class="scroll">
         <table>
-          <thead><tr><th>Incluir</th><th></th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>TIPO DE IPE y MOTIVO</th><th>Documentos a aplicar · monto · saldo que queda</th><th class="n">Saldo final</th></tr></thead>
+          <thead><tr><th>Incluir</th><th>Categoría</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>TIPO DE IPE</th><th>Documentos a aplicar · monto · saldo que queda</th><th class="n">Saldo final</th></tr></thead>
           <tbody>
             ${g.rows.map((r, ri) => `
               <tr>
                 <td><input type="checkbox" data-f="incluir" data-r="${ri}" ${r.incluir ? 'checked' : ''} aria-label="Incluir ${esc(r.doc)} ${esc(r.nro)}"></td>
                 <td>${flagHtml(r.fecha)}</td>
-                <td>${esc(r.doc)}</td><td>${esc(r.nro)}${previosHtml(r)}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
-                <td class="n">${clp(r.saldoInicial)}${r.saldoInicial !== r.saldo ? `<div class="prev">saldo Excel ${clp(r.saldo)}</div>` : ''}${r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
-                <td class="motivo">${tipoSelect(r, ri)}<textarea data-f="texto" data-r="${ri}" rows="4" aria-label="MOTIVO">${esc(r.texto)}</textarea></td>
+                <td>${esc(r.doc)}</td><td>${esc(r.nro)}</td><td class="nowrap">${esc(fmt.fechaCorta(r.fecha))}</td>
+                <td class="n">${clp(r.saldoInicial)}${netoHtml(r)}</td>
+                <td>${tipoHtml(r)}</td>
                 <td class="apls">
                   ${r.aplicaciones.map((a, ai) => `
                     <div class="apl">
@@ -386,6 +387,7 @@
     $('btn-zip-dev').disabled = !groups.length;
     $('devoluciones').innerHTML = groups.map((g, gi) => devCardHtml(g, gi)).join('') || '<p class="muted">No hay devoluciones pendientes.</p>';
     groups.forEach((g, gi) => refreshDev(gi));
+    filtrarTarjetas('devoluciones', 'devGroups', $('buscar-dev').value);
   }
 
   function devCardHtml(g, gi) {
@@ -398,16 +400,16 @@
         </div>
         <div class="scroll">
         <table>
-          <thead><tr><th>Incluir</th><th></th><th>C.F.</th><th>Tipo docto.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>Monto a devolver</th><th>TIPO DE IPE y OBSERVACIONES</th></tr></thead>
+          <thead><tr><th>Incluir</th><th>Categoría</th><th>C.F.</th><th>Tipo docto.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>Monto a devolver</th><th>TIPO DE IPE</th></tr></thead>
           <tbody>
             ${g.rows.map((r, ri) => `
               <tr>
                 <td><input type="checkbox" data-f="incluir" data-r="${ri}" ${r.incluir ? 'checked' : ''} aria-label="Incluir ${esc(r.doc)} ${esc(r.nro)}"></td>
                 <td>${flagHtml(r.fecha)}</td>
-                <td>${esc(r.cf)}</td><td>${esc(r.doc)} ${esc(r.nro)}${previosHtml(r)}</td><td>${esc(fmt.fechaCorta(r.fecha))}</td>
-                <td class="n">${clp(r.saldoInicial)}${r.saldoInicial !== r.saldo ? `<div class="prev">saldo Excel ${clp(r.saldo)}</div>` : ''}${r.consolidado ? `<div class="prev">neto: ${clp(r.consolidado.acreedor)} − ${clp(r.consolidado.deudor)}</div>` : ''}</td>
+                <td>${esc(r.cf)}</td><td>${esc(r.doc)} ${esc(r.nro)}</td><td class="nowrap">${esc(fmt.fechaCorta(r.fecha))}</td>
+                <td class="n">${clp(r.saldoInicial)}${netoHtml(r)}</td>
                 <td><input type="text" class="monto" data-f="montoDevolver" data-r="${ri}" value="${esc(montoInput(r.montoDevolver))}" inputmode="numeric" aria-label="Monto a devolver"><div class="prev" data-rest="${ri}"></div></td>
-                <td class="motivo">${tipoSelect(r, ri)}<textarea data-f="texto" data-r="${ri}" rows="4" aria-label="Observaciones">${esc(r.texto)}</textarea></td>
+                <td>${tipoHtml(r)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -416,7 +418,8 @@
           <label class="ancho">REF.<input type="text" data-b="referencia" value="${esc(b.referencia)}" placeholder="Correo electrónico … de fecha dd.mm.aaaa a las hh:mm hrs."></label>
           <label>Tipo de cuenta<select data-b="tipoCuenta">${devoluciones.TIPOS_CUENTA.map((t) => `<option ${t === b.tipoCuenta ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label>Número de cuenta<input type="text" data-b="numeroCuenta" value="${esc(b.numeroCuenta)}"></label>
-          <label>Banco<input type="text" data-b="banco" value="${esc(b.banco)}"></label>
+          <label>Banco<select data-b="banco"><option value="">Selecciona el banco</option>${devoluciones.BANCOS.map((n) => `<option ${n === b.banco ? 'selected' : ''}>${esc(n)}</option>`).join('')}<option ${b.banco === 'Otro' ? 'selected' : ''}>Otro</option></select>
+            <input type="text" data-b="bancoOtro" value="${esc(b.bancoOtro)}" placeholder="Nombre del banco" aria-label="Nombre del banco" ${b.banco === 'Otro' ? '' : 'hidden'}></label>
           <label class="ancho">Correos electrónicos (uno por línea)<textarea data-b="correos" rows="2">${esc(b.correos)}</textarea></label>
         </div>
         <div class="preview" data-preview="${gi}"></div>
@@ -476,13 +479,12 @@
   }
 
   // ---------- historiales ----------
-  function tablaHistorial(lista, etiquetaNumero, columnaMonto, montoDoc) {
-    return `<table><thead><tr><th>Generado</th><th>Fecha</th><th>${etiquetaNumero}</th><th>Empresa</th><th>RUT</th><th>Documentos (${columnaMonto} / queda pendiente)</th><th></th></tr></thead><tbody>
+  function tablaHistorial(lista, columnaMonto, montoDoc) {
+    return `<table><thead><tr><th>Generado</th><th>Fecha</th><th>Empresa</th><th>RUT</th><th>Documentos (${columnaMonto} / queda pendiente)</th><th></th></tr></thead><tbody>
       ${lista.map((e) => `<tr>
         <td>${esc(new Date(e.generado).toLocaleString('es-CL'))}</td>
-        <td>${esc(e.fechaCompleta || e.fechaMemo || e.fechaDocumento)}</td>
-        <td><input type="text" class="numero" data-num="${esc(e.id)}" value="${esc(e.numero || '')}" placeholder="N°" aria-label="${etiquetaNumero}"></td>
-        <td>${esc(e.empresa)}</td><td>${esc(e.rut)}</td>
+        <td class="nowrap">${esc(e.fechaCompleta || e.fechaMemo || e.fechaDocumento)}</td>
+        <td>${esc(e.empresa)}</td><td class="nowrap">${esc(e.rut)}</td>
         <td>${e.documentos.map((d) => `<b>${esc(d.doc)} ${esc(d.nro)}</b>: ${clp(montoDoc(d))} / ${clp(d.remanente)}`).join('<br>')}</td>
         <td><div class="actions">
           <button class="link" data-redl="${esc(e.id)}">Descargar de nuevo</button>
@@ -496,15 +498,15 @@
   function renderHistorial() {
     const h = ordenar(state.historial);
     $('n-hist').textContent = h.length;
-    $('hist-resumen').textContent = `${h.length} memo(s) generados. Anota el N° de cada memo: se usa en la frase "Asimismo… según MEMO N°…" de los memos siguientes.`;
-    $('historial').innerHTML = h.length ? tablaHistorial(h, 'N° memo', 'aplicado', (d) => d.aplicado) : '<p class="muted">Aún no se han generado memos.</p>';
+    $('hist-resumen').textContent = `${h.length} memo(s) generados.`;
+    $('historial').innerHTML = h.length ? tablaHistorial(h, 'aplicado', (d) => d.aplicado) : '<p class="muted">Aún no se han generado memos.</p>';
   }
 
   function renderHistorialDev() {
     const h = ordenar(state.historialDev);
     $('n-hist-dev').textContent = h.length;
-    $('hist-dev-resumen').textContent = `${h.length} devolución(es) generadas. Anota el N° de oficio de cada una.`;
-    $('historial-dev').innerHTML = h.length ? tablaHistorial(h, 'N° oficio', 'devuelto', (d) => d.devuelto) : '<p class="muted">Aún no se han generado devoluciones.</p>';
+    $('hist-dev-resumen').textContent = `${h.length} devolución(es) generadas.`;
+    $('historial-dev').innerHTML = h.length ? tablaHistorial(h, 'devuelto', (d) => d.devuelto) : '<p class="muted">Aún no se han generado devoluciones.</p>';
   }
 
   function eventosHistorial(contenedor, lista, nombre) {
@@ -524,18 +526,6 @@
         reconstruir();
         renderTodo();
       }
-    });
-    $(contenedor).addEventListener('change', (ev) => {
-      const id = ev.target.dataset.num;
-      const e = id && state[lista].find((x) => x.id === id);
-      if (!e) return;
-      e.numero = ev.target.value.trim();
-      saveHistoriales();
-      // No se redibuja el historial (el campo se está editando): solo lo que usa el N° en la frase "Asimismo".
-      reconstruir();
-      renderResumen();
-      renderMemos();
-      renderDevoluciones();
     });
   }
 
@@ -589,6 +579,11 @@
       const g = state[grupos][gi];
       if (e.target.dataset.b) {
         g.banco[e.target.dataset.b] = e.target.value;
+        if (e.target.dataset.b === 'banco') {
+          const otro = card.querySelector('[data-b="bancoOtro"]');
+          otro.hidden = e.target.value !== 'Otro';
+          if (!otro.hidden) otro.focus();
+        }
         return refresh(gi);
       }
       const f = e.target.dataset.f;
@@ -596,8 +591,6 @@
       const ri = Number(e.target.dataset.r);
       const row = g.rows[ri];
       if (f === 'incluir') row.incluir = e.target.checked;
-      else if (f === 'texto') row.texto = e.target.value;
-      else if (f === 'glosa') aplicarGlosa(row, e.target.value, card, ri);
       else if (f === 'montoDevolver') row.montoDevolver = e.target.value.trim() === '' ? '' : fmt.toNumber(e.target.value);
       else {
         const apl = row.aplicaciones[Number(e.target.dataset.a)];
@@ -654,6 +647,8 @@
       state.devGroups.forEach((g, gi) => refreshDev(gi));
     });
     $('filtro-bandera').addEventListener('change', renderListado);
+    $('buscar-memos').addEventListener('input', (e) => filtrarTarjetas('memos', 'memoGroups', e.target.value));
+    $('buscar-dev').addEventListener('input', (e) => filtrarTarjetas('devoluciones', 'devGroups', e.target.value));
     $('buscar').addEventListener('input', renderListado);
 
     eventosTarjetas('memos', 'memoGroups', refreshMemo, {
@@ -670,11 +665,11 @@
     eventosHistorial('historial', 'historial', 'el memo');
     eventosHistorial('historial-dev', 'historialDev', 'la devolución');
     $('btn-hist-xlsx').addEventListener('click', () => exportarHistorialXlsx(state.historial, 'Historial memos', 'Historial_memos_IPE',
-      ['Generado', 'Fecha', 'N° memo', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Aplicaciones', 'Total aplicado', 'Queda pendiente'],
-      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta || e.fechaMemo, e.numero || '', e.empresa, e.rut, d.doc, d.nro, d.saldoInicial ?? d.saldo, d.aplicaciones, d.aplicado, d.remanente]));
+      ['Generado', 'Fecha', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Aplicaciones', 'Total aplicado', 'Queda pendiente'],
+      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta || e.fechaMemo, e.empresa, e.rut, d.doc, d.nro, d.saldoInicial ?? d.saldo, d.aplicaciones, d.aplicado, d.remanente]));
     $('btn-hist-dev-xlsx').addEventListener('click', () => exportarHistorialXlsx(state.historialDev, 'Historial devoluciones', 'Historial_devoluciones_IPE',
-      ['Generado', 'Fecha', 'N° oficio', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Devuelto', 'Queda pendiente', 'Banco', 'Tipo de cuenta', 'N° cuenta'],
-      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta, e.numero || '', e.empresa, e.rut, d.doc, d.nro, d.saldoInicial, d.devuelto, d.remanente, e.banco?.banco || '', e.banco?.tipoCuenta || '', e.banco?.numeroCuenta || '']));
+      ['Generado', 'Fecha', 'Empresa', 'RUT', 'Doc.', 'Nro.', 'Saldo pendiente', 'Devuelto', 'Queda pendiente', 'Banco', 'Tipo de cuenta', 'N° cuenta'],
+      (e, d) => [new Date(e.generado).toLocaleString('es-CL'), e.fechaCompleta, e.empresa, e.rut, d.doc, d.nro, d.saldoInicial, d.devuelto, d.remanente, (e.banco?.banco === 'Otro' ? e.banco?.bancoOtro : e.banco?.banco) || '', e.banco?.tipoCuenta || '', e.banco?.numeroCuenta || '']));
     document.querySelectorAll('[data-backup]').forEach((b) => b.addEventListener('click', backup));
     document.querySelectorAll('[data-import]').forEach((i) => i.addEventListener('change', (e) => { importar(e.target.files[0]); e.target.value = ''; }));
   }

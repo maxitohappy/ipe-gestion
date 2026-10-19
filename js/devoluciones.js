@@ -10,18 +10,29 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else (root.IPE = root.IPE || {}).devoluciones = api;
 })(typeof self !== 'undefined' ? self : this, function (fmt, glosas, memo) {
-  const C = glosas.PLACEHOLDER;
   const TIPOS_CUENTA = ['Cuenta Corriente', 'Cuenta Vista', 'Cuenta de Ahorro', 'Cuenta RUT'];
-  const REFERENCIA_BASE = `Correo electrónico ${C} de fecha ${C} a las ${C} hrs.`;
+  // Bancos e instituciones con cuentas para transferencias en Chile ("Otro" permite escribir el nombre).
+  const BANCOS = [
+    'Banco de Chile', 'Banco Edwards', 'BancoEstado', 'Banco Santander', 'Banco BCI', 'Scotiabank', 'Banco Itaú',
+    'Banco BICE', 'Banco Security', 'Banco Falabella', 'Banco Ripley', 'Banco Consorcio', 'Banco Internacional',
+    'HSBC Bank Chile', 'Banco BTG Pactual', 'JP Morgan Chase Bank', 'Banco de la Nación Argentina', 'Bank of China',
+    'China Construction Bank', 'MUFG Bank', 'Tenpo', 'Coopeuch', 'Mercado Pago', 'Prepago Los Héroes',
+  ];
+  const REFERENCIA_BASE = 'Correo electrónico [[correo del cliente]] de fecha [[fecha]] a las [[hora]] hrs.';
 
   /** Grupos de devolución: empresas con IPE en DEVOLVER y saldo pendiente. */
   function buildGroups(rows, idx = new Map()) {
     return memo.prepararGrupos(rows, 'DEVOLVER', idx, (r, pendiente) => ({ montoDevolver: pendiente }))
-      .map((g) => ({ ...g, banco: { referencia: '', tipoCuenta: TIPOS_CUENTA[0], numeroCuenta: '', banco: '', correos: '' } }));
+      .map((g) => ({ ...g, banco: { referencia: '', tipoCuenta: TIPOS_CUENTA[0], numeroCuenta: '', banco: '', bancoOtro: '', correos: '' } }));
   }
 
   function total(group) {
     return group.rows.filter((r) => r.incluir).reduce((s, r) => s + (Number(r.montoDevolver) || 0), 0);
+  }
+
+  /** Banco elegido (o escrito en "Otro"). */
+  function nombreBanco(b) {
+    return (b.banco === 'Otro' ? b.bancoOtro : b.banco || '').trim();
   }
 
   function correos(texto) {
@@ -34,15 +45,12 @@
     if (!sel.length) w.push('No hay documentos seleccionados.');
     for (const r of sel) {
       const id = `${r.doc} ${r.nro}`;
-      if (!r.texto) w.push(`${id}: sin OBSERVACIONES (elige el TIPO DE IPE o escribe la justificación).`);
-      const faltan = glosas.pendientes(r.texto);
-      if (faltan) w.push(`${id}: OBSERVACIONES tiene ${faltan} dato(s) por completar (<completar por el usuario>).`);
       if (!(Number(r.montoDevolver) > 0)) w.push(`${id}: falta el monto a devolver.`);
       if (Number(r.montoDevolver) > r.saldoInicial) w.push(`${id}: el monto a devolver supera el saldo pendiente (${fmt.formatCLP(r.saldoInicial)}).`);
     }
     const b = group.banco;
     if (!b.referencia.trim()) w.push('Falta la REF. (correo del cliente con fecha y hora).');
-    if (!b.numeroCuenta.trim() || !b.banco.trim()) w.push('Faltan datos bancarios (banco y número de cuenta).');
+    if (!b.numeroCuenta.trim() || !nombreBanco(b)) w.push('Faltan datos bancarios (banco y número de cuenta).');
     if (!correos(b.correos).length) w.push('Falta al menos un correo electrónico del cliente.');
     return w;
   }
@@ -54,20 +62,20 @@
     const lista = correos(b.correos);
     return {
       fecha: fmt.fechaMesAnio(opts.fecha),
-      referencia: b.referencia.trim() || REFERENCIA_BASE,
+      referencia: glosas.partes(b.referencia.trim() || REFERENCIA_BASE),
       rut: group.rutFmt,
       razon_social: group.razon,
       items: sel.map((r) => ({
         cf: r.cf,
         tipo_docto: `${r.doc} ${r.nro}`,
         monto: fmt.formatCLP(Number(r.montoDevolver) || 0),
-        observaciones: memo.textoCompleto(r),
+        observaciones: glosas.partes(memo.textoCompleto(r)),
       })),
-      tipo_cuenta: b.tipoCuenta || C,
-      numero_cuenta: b.numeroCuenta.trim() || C,
-      banco: b.banco.trim() || C,
+      tipo_cuenta: glosas.partes(b.tipoCuenta || '[[tipo de cuenta]]'),
+      numero_cuenta: glosas.partes(b.numeroCuenta.trim() || '[[N° de cuenta]]'),
+      banco: glosas.partes(nombreBanco(b) || '[[banco]]'),
       monto_total: fmt.formatCLP(total(group)),
-      correos: (lista.length ? lista : [C]).map((correo, i) => ({ primero: i === 0, correo })),
+      correos: (lista.length ? lista : ['[correo]']).map((correo, i) => ({ primero: i === 0, correo })),
       iniciales: opts.iniciales || '',
     };
   }
@@ -104,9 +112,18 @@
   function render(templateBuffer, data, PizZip, Docxtemplater) {
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => '' });
-    doc.render(data);
+    // Los oficios guardados con versiones anteriores traen estos campos como texto: se dividen en partes.
+    const aPartes = (v) => (typeof v === 'string' ? glosas.partes(v) : v);
+    doc.render({
+      ...data,
+      referencia: aPartes(data.referencia),
+      tipo_cuenta: aPartes(data.tipo_cuenta),
+      numero_cuenta: aPartes(data.numero_cuenta),
+      banco: aPartes(data.banco),
+      items: (data.items || []).map((it) => ({ ...it, observaciones: aPartes(it.observaciones) })),
+    });
     return doc.getZip();
   }
 
-  return { TIPOS_CUENTA, REFERENCIA_BASE, buildGroups, total, correos, warnings, devolucionData, fileName, historialEntry, render };
+  return { TIPOS_CUENTA, BANCOS, REFERENCIA_BASE, buildGroups, total, nombreBanco, correos, warnings, devolucionData, fileName, historialEntry, render };
 });

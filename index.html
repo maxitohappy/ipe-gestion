@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261019b">
+  <link rel="stylesheet" href="css/styles.css?v=20261020">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
       <h1>Gestión IPE</h1>
-      <p class="sub">Ingresos percibidos en exceso — memos de aplicación y devoluciones. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-19b</span></p>
+      <p class="sub">Ingresos percibidos en exceso — memos de aplicación y devoluciones. El Excel se procesa solo en este navegador: ningún dato sale de tu computador. <span class="version">Versión 2026-10-20</span></p>
       <p class="sub offline-info">
         <span id="modo-local" hidden><b>Modo sin internet</b> (abierto desde este computador).</span>
         <span id="modo-web"><a href="https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip">Descargar versión sin internet</a> — descomprime el .zip y abre <b>index.html</b> con doble clic.</span>
@@ -60,10 +60,10 @@
         <div id="kpis" class="kpis"></div>
         <div class="card">
           <div class="row-between">
-            <h2>Ingresos anticipados</h2>
+            <h2>Ingresos anticipados de empresas pendientes</h2>
             <div class="actions">
-              <select id="filtro-bandera" aria-label="Filtrar por bandera">
-                <option value="">Todas las banderas</option>
+              <select id="filtro-bandera" aria-label="Filtrar por categoría">
+                <option value="">Todas las categorías</option>
                 <option value="roja">Rojas (años anteriores)</option>
                 <option value="amarilla">Amarillas (1er semestre)</option>
                 <option value="verde">Verdes (2º semestre)</option>
@@ -77,8 +77,10 @@
       </div>
 
       <div id="tab-memos" class="tab" hidden>
-        <p class="muted">Elige el <b>TIPO DE IPE</b> para redactar el MOTIVO y completa los datos marcados como <b>&lt;completar por el usuario&gt;</b>. Cada ingreso anticipado puede aplicarse a varios documentos con <b>+ Agregar documento</b>. Al descargar el memo, lo aplicado pasa al <b>Historial de memos</b> y el saldo que no se aplicó sigue pendiente aquí. El Nº de memo queda en blanco en el Word; anótalo luego en el historial.</p>
+        <p class="muted leyenda simbologia"><b>Simbología (categoría):</b> <span class="flag roja"></span> año anterior · <span class="flag amarilla"></span> 1er semestre del año en curso · <span class="flag verde"></span> 2º semestre del año en curso</p>
+        <p class="muted">El MOTIVO se redacta en el Word según el <b>TIPO DE IPE</b> de la planilla; los datos a completar quedan <mark>[resaltados]</mark>. Cada ingreso anticipado puede aplicarse a varios documentos con <b>+ Agregar documento</b>. Al descargar el memo, lo aplicado pasa al <b>Historial de memos</b> y el saldo que no se aplicó sigue pendiente aquí.</p>
         <div class="row-between">
+          <input type="search" id="buscar-memos" placeholder="Buscar por RUT o empresa" aria-label="Buscar memos por RUT o empresa">
           <p class="muted" id="memos-resumen"></p>
           <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
         </div>
@@ -86,8 +88,10 @@
       </div>
 
       <div id="tab-devoluciones" class="tab" hidden>
-        <p class="muted">Elige el <b>TIPO DE IPE</b> para redactar las OBSERVACIONES, indica el monto a devolver y completa la REF. y los datos bancarios. Al descargar el oficio, lo devuelto pasa al <b>Historial de devoluciones</b> y el saldo restante sigue pendiente aquí.</p>
+        <p class="muted leyenda simbologia"><b>Simbología (categoría):</b> <span class="flag roja"></span> año anterior · <span class="flag amarilla"></span> 1er semestre del año en curso · <span class="flag verde"></span> 2º semestre del año en curso</p>
+        <p class="muted">Las OBSERVACIONES se redactan en el Word según el <b>TIPO DE IPE</b> de la planilla; los datos a completar quedan <mark>[resaltados]</mark>. Indica el monto a devolver y completa la REF. y los datos bancarios. Al descargar el oficio, lo devuelto pasa al <b>Historial de devoluciones</b> y el saldo restante sigue pendiente aquí.</p>
         <div class="row-between">
+          <input type="search" id="buscar-dev" placeholder="Buscar por RUT o empresa" aria-label="Buscar devoluciones por RUT o empresa">
           <p class="muted" id="dev-resumen"></p>
           <button id="btn-zip-dev" class="primary">Descargar todas las devoluciones (.zip)</button>
         </div>
@@ -126,18 +130,18 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261019b"></script>
-  <script src="vendor/pizzip.min.js?v=20261019b"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261019b"></script>
-  <script src="vendor/FileSaver.min.js?v=20261019b"></script>
-  <script src="js/format.js?v=20261019b"></script>
-  <script src="js/glosas.js?v=20261019b"></script>
-  <script src="js/movimientos.js?v=20261019b"></script>
-  <script src="js/parser.js?v=20261019b"></script>
-  <script src="js/memo.js?v=20261019b"></script>
-  <script src="js/devoluciones.js?v=20261019b"></script>
-  <script src="js/resumen.js?v=20261019b"></script>
-  <script src="js/plantilla.js?v=20261019b"></script>
-  <script src="js/app.js?v=20261019b"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261020"></script>
+  <script src="vendor/pizzip.min.js?v=20261020"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261020"></script>
+  <script src="vendor/FileSaver.min.js?v=20261020"></script>
+  <script src="js/format.js?v=20261020"></script>
+  <script src="js/glosas.js?v=20261020"></script>
+  <script src="js/movimientos.js?v=20261020"></script>
+  <script src="js/parser.js?v=20261020"></script>
+  <script src="js/memo.js?v=20261020"></script>
+  <script src="js/devoluciones.js?v=20261020"></script>
+  <script src="js/resumen.js?v=20261020"></script>
+  <script src="js/plantilla.js?v=20261020"></script>
+  <script src="js/app.js?v=20261020"></script>
 </body>
 </html>

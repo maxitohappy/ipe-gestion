@@ -10,17 +10,17 @@ Hoja de trabajo con, entre otras, las columnas: `TIPO DE IPE` (B), `MI GESTION` 
 
 - Las columnas se reconocen por su nombre: el orden y el nombre de la hoja pueden cambiar.
 - `MI GESTION` indica el estado (`APLICAR`, `DEVOLVER`, `correo enviado …`). También se acepta el nombre anterior `MIS APUNTES`.
-- `TIPO DE IPE` debe coincidir con un tipo del documento GLOSAS: *Pago en exceso, Pago duplicado, Depósito sin identificar, Nota de Crédito, Error en pago, Regularización, Anulación RLE*.
+- `TIPO DE IPE` debe coincidir con un tipo del documento GLOSAS: *Pago en exceso, Pago duplicado, Depósito sin identificar, Nota de Crédito, Error en pago, Regularización, Anulación RLE*. "Error en pago" tiene tres redacciones: `Error en pago` (o `Error en pago 1`), `Error en pago 2` y `Error en pago 3`. Si el tipo está vacío, el MOTIVO usa la columna *Justificación*.
 - Si el libro trae varias hojas (por ejemplo, el mayor contable), la app usa la hoja de trabajo IPE; se puede cambiar con el selector **Hoja del Excel**.
 - La columna ACREEDOR/DEUDOR se reconoce aunque venga sin el encabezado `XX`.
 - Cuando un mismo IPE (empresa + documento + número) tiene saldo deudor y acreedor, se muestra **un solo registro** con el saldo acreedor menos el deudor.
 
 ## Pestañas
 
-- **Resumen y alertas:** empresas en total (por razón social), en Memos, en Devoluciones y pendientes (las que no están en ninguna de las dos), y el listado de ingresos anticipados con **bandera**: 🟥 años anteriores, 🟨 primer semestre del año en curso, 🟩 segundo semestre.
-- **Memos (APLICAR):** un memo Word por empresa. El **MOTIVO** se redacta con la glosa del TIPO DE IPE (los datos `<completar por el usuario>` se completan en la app o en Word). Cada IPE puede aplicarse a varios documentos; si se aplica una parte (por ejemplo $20 de $100), lo aplicado pasa al historial y **el resto ($80) sigue pendiente**. En el memo siguiente del mismo IPE, el MOTIVO agrega *"Asimismo, con fecha …, se aplicaron $20, según MEMO N°…, de fecha …"*. La fecha del Word va como mes.año (`SANTIAGO, OCT.2026`) y el N° de memo queda en blanco.
-- **Devoluciones:** un oficio Word por empresa con el formato de devolución. **OBSERVACIONES** usa la glosa del TIPO DE IPE; se completan la REF., los datos bancarios y los correos. Se puede devolver el total o una parte.
-- **Historial de memos** e **Historial de devoluciones:** cada documento descargado queda registrado. Ahí se anota el **N° de memo / N° de oficio** (se usa en la frase "Asimismo…"), se puede volver a descargar, devolver a pendientes, exportar a Excel y respaldar/importar.
+- **Resumen y alertas:** empresas en total (por razón social), en Memos, en Devoluciones y pendientes (las que no están en ninguna de las dos), y el listado de los ingresos anticipados de las **empresas pendientes**, numerado, con su MI GESTION y **categoría** (bandera): 🟥 años anteriores, 🟨 primer semestre del año en curso, 🟩 segundo semestre.
+- **Memos (APLICAR):** un memo Word por empresa (con buscador por RUT o empresa). El **MOTIVO** se redacta en el Word con la glosa del TIPO DE IPE de la planilla; los datos a completar aparecen como **[N° factura]**, **[fecha factura]**, etc., con fondo amarillo. Cada IPE puede aplicarse a varios documentos; si se aplica una parte (por ejemplo $20 de $100), lo aplicado pasa al historial y **el resto ($80) sigue pendiente**. En el memo siguiente del mismo IPE, el MOTIVO agrega *"Asimismo, con fecha …, se aplicaron $20, según MEMO N°[N° memo], de fecha …"* (el N° se completa en el Word). La fecha del Word va como mes.año (`SANTIAGO, OCT.2026`) y el N° de memo queda en blanco.
+- **Devoluciones:** un oficio Word por empresa con el formato de devolución (con buscador por RUT o empresa). **OBSERVACIONES** usa la glosa del TIPO DE IPE; en la app se completan la REF., el tipo de cuenta, el N° de cuenta, el **banco** (lista de bancos de Chile u "Otro") y los correos. Lo que falte queda resaltado en el Word. Se puede devolver el total o una parte.
+- **Historial de memos** e **Historial de devoluciones:** cada documento descargado queda registrado; se puede volver a descargar, devolver a pendientes, exportar a Excel y respaldar/importar.
 
 ### Saldo pendiente entre meses
 
@@ -32,7 +32,8 @@ Cada movimiento del historial guarda el saldo que tenía el IPE en el Excel. Al 
 2. Si la hoja no tiene `MI GESTION`, usa **Copiar desde el Excel del mes anterior** (copia MI GESTION y TIPO DE IPE de los registros que ya existían). Opcional: **Descargar hoja de trabajo** para completar los nuevos en Excel y volver a cargarla.
 3. Revisa **Resumen y alertas**.
 4. En **Memos** y **Devoluciones**: revisa fecha e iniciales, elige el TIPO DE IPE, completa los datos y descarga los Word.
-5. En los **historiales**: anota el N° de cada memo y oficio, y descarga un respaldo periódicamente (el historial se guarda en el navegador).
+5. Completa en Word los datos resaltados en amarillo.
+6. En los **historiales**: descarga un respaldo periódicamente (el historial se guarda en el navegador).
 
 ## Uso sin internet (respaldo)
 
@@ -56,7 +57,9 @@ node --test tests/*.test.js
 
 Plantillas (`templates/`), editables en Word conservando los marcadores:
 
-- `memo_template.docx`: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, párrafos `{#motivos}{#primero}MOTIVO :{/primero} {doc} {nro}: {justificacion}{/motivos}`, fila `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.
-- `devolucion_template.docx`: `{referencia}`, `{fecha}`, `{rut}`, `{razon_social}`, fila `{#items}{cf} {tipo_docto} {monto} {observaciones}{/items}`, `{tipo_cuenta}`, `{numero_cuenta}`, `{banco}`, `{monto_total}`, párrafos `{#correos}{correo}{/correos}` e `{iniciales}`.
+Los textos con datos a completar se pasan como listas de partes `{#campo}{#n}{t}{/n}{#m}{t}{/m}{/campo}` (`m` = resaltado).
+
+- `memo_template.docx`: `{fecha}`, `{razon_social}`, `{rut}`, `{iniciales}`, párrafos `{#motivos}{#primero}MOTIVO :{/primero} {doc} {nro}: {justificacion…}{/motivos}`, fila `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.
+- `devolucion_template.docx`: `{referencia…}`, `{fecha}`, `{rut}`, `{razon_social}`, fila `{#items}{cf} {tipo_docto} {monto} {observaciones…}{/items}`, `{tipo_cuenta…}`, `{numero_cuenta…}`, `{banco…}`, `{monto_total}`, párrafos `{#correos}{correo}{/correos}` e `{iniciales}`.
 
 Las glosas por tipo de IPE están en `js/glosas.js`.

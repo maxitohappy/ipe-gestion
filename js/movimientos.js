@@ -52,17 +52,17 @@
 
   /**
    * Frases que complementan el MOTIVO / OBSERVACIONES con los movimientos previos del IPE:
-   * "Asimismo, con fecha 14.OCT.2026, se aplicaron $20, según MEMO N°XX, de fecha 14.OCT.2026."
+   * "Asimismo, con fecha 14.OCT.2026, se aplicaron $20, según MEMO N°[N° memo], de fecha 14.OCT.2026."
+   * El N° del memo u oficio se completa en el Word (queda resaltado).
    */
   function frasesAsimismo(previos) {
     return previos
       .filter((m) => m.monto > 0)
       .map((m) => {
-        const numero = m.numero || 'XX';
-        const fecha = m.fecha || 'XX.XXX.XXXX';
+        const fecha = m.fecha || '[[fecha]]';
         return m.tipo === 'devolucion'
-          ? `Asimismo, con fecha ${fecha}, se devolvieron ${fmt.formatCLP(m.monto)}, según OF. (O) N°${numero}, de fecha ${fecha}.`
-          : `Asimismo, con fecha ${fecha}, se aplicaron ${fmt.formatCLP(m.monto)}, según MEMO N°${numero}, de fecha ${fecha}.`;
+          ? `Asimismo, con fecha ${fecha}, se devolvieron ${fmt.formatCLP(m.monto)}, según OF. (O) N°${m.numero || '[[N° oficio]]'}, de fecha ${fecha}.`
+          : `Asimismo, con fecha ${fecha}, se aplicaron ${fmt.formatCLP(m.monto)}, según MEMO N°${m.numero || '[[N° memo]]'}, de fecha ${fecha}.`;
       });
   }
 

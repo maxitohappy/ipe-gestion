@@ -110,11 +110,15 @@ label.primary.file-btn { background: var(--accent); color: var(--accent-text); }
 .flags-kpi { display: flex; gap: 14px; font-size: 18px; }
 .leyenda { font-size: 12px; }
 
-td.motivo { min-width: 340px; }
-td.motivo select { width: 100%; margin-bottom: 6px; }
-td.motivo textarea, .banco textarea { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+.nowrap { white-space: nowrap; }
+mark { background: #fff59d; color: #1d2330; padding: 0 2px; border-radius: 2px; }
+.simbologia { margin: 0 0 8px; }
+.banco textarea { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; resize: vertical; }
 input.numero { width: 80px; }
 input.monto { width: 110px; }
 input[type="search"] { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 240px; }
 .form.banco { margin-top: 12px; }
 .form.banco .ancho { grid-column: 1 / -1; }
+.banco select, .banco input[type="text"] { width: 100%; }
+.banco input[data-b="bancoOtro"] { margin-top: 6px; }
+.card[hidden] { display: none; }

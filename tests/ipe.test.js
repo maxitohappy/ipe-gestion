@@ -75,13 +75,18 @@ test('consolida DEUDOR y ACREEDOR del mismo IPE en un solo registro acreedor', (
   assert.deepEqual(dos.consolidado, { filas: [3, 4], acreedor: 542760, deudor: 529798 });
 });
 
-test('glosas: tipos del documento GLOSAS y datos por completar', () => {
+test('glosas: tipos del documento GLOSAS y datos a completar resaltados', () => {
   assert.equal(glosas.GLOSAS.length, 9);
-  assert.equal(glosas.porTipo('PAGO EN EXCESO')[0].id, 'pago-exceso');
-  assert.equal(glosas.porTipo('Deposito sin identificar')[0].id, 'deposito-sin-identificar');
-  assert.equal(glosas.porTipo('Error en pago').length, 3);
-  assert.equal(glosas.porTipo('otro').length, 0);
-  assert.equal(glosas.pendientes(glosas.porId('pago-exceso').texto), 7);
+  assert.equal(glosas.porTipo('PAGO EN EXCESO').id, 'pago-exceso');
+  assert.equal(glosas.porTipo('Deposito sin identificar').id, 'deposito-sin-identificar');
+  assert.equal(glosas.porTipo('Error en pago').id, 'error-pago-regularizacion');
+  assert.equal(glosas.porTipo('Error en pago 2').id, 'error-pago-fee');
+  assert.equal(glosas.porTipo('Error en pago 3').id, 'error-pago-recibo');
+  assert.equal(glosas.porTipo('otro'), null);
+  assert.equal(glosas.porTipo(''), null);
+  assert.equal(glosas.pendientes(glosas.porTipo('Pago en exceso').texto), 7);
+  assert.deepEqual(glosas.partes('Factura N°[[N° factura]] pagada.'), [{ n: true, t: 'Factura N°' }, { m: true, t: '[N° factura]' }, { n: true, t: ' pagada.' }]);
+  assert.deepEqual(glosas.partes('a <completar por el usuario>'), [{ n: true, t: 'a ' }, { m: true, t: '[completar]' }]);
 });
 
 test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que deja saldo pendiente', () => {
@@ -104,7 +109,11 @@ test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que d
   assert.equal(uno.rows[0].saldoInicial, 80);
   uno.rows[0].aplicaciones = [{ docto: 'Pagar FEE 2', monto: 10 }];
   const data2 = memo.memoData(uno, { fecha: new Date(2026, 9, 20) });
-  assert.match(data2.motivos[0].justificacion, /Asimismo, con fecha 14\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha 14\.OCT\.2026\.$/);
+  const texto2 = data2.motivos[0].justificacion.map((p) => p.t).join('');
+  assert.match(texto2, /Asimismo, con fecha 14\.OCT\.2026, se aplicaron \$ 20, según MEMO N°310, de fecha 14\.OCT\.2026\.$/);
+  historial[0].numero = '';
+  const sinNumero = memo.memoData(memo.buildGroups(rows, movimientos.indice(historial, [])).find((g) => g.razon === 'EMPRESA UNO SPA'), { fecha: HOY });
+  assert.ok(sinNumero.motivos[0].justificacion.some((p) => p.m && p.t === '[N° memo]'));
   assert.equal(data2.items[0].monto, '$ 80');
   historial.push(memo.historialEntry(uno, data2, new Date(2026, 9, 20, 10), { fecha: new Date(2026, 9, 20) }));
   idx = movimientos.indice(historial, []);
@@ -125,6 +134,7 @@ test('memo: sin TIPO DE IPE usa la justificación del Excel', () => {
   const dos = memo.buildGroups(leer()).find((g) => g.razon === 'EMPRESA DOS LTDA');
   assert.equal(dos.rows[0].glosaId, '');
   assert.equal(dos.rows[0].texto, 'NCE N°18549');
+  assert.equal(memo.textoInicial({ tipoIpe: '', justificacion: '' }).texto, '[[motivo]]');
   assert.equal(dos.rows[0].saldoInicial, 12962);
 });
 
@@ -135,37 +145,41 @@ test('devolución: observaciones por TIPO DE IPE, datos bancarios, devolución p
   assert.equal(tres.rows[0].montoDevolver, 40);
   assert.match(tres.rows[0].texto, /^Corresponde al pago duplicado/);
   tres.rows[0].montoDevolver = 30;
-  Object.assign(tres.banco, { referencia: 'Correo de fecha 01.10.2026', numeroCuenta: '123', banco: 'BancoEstado', correos: 'a@x.cl\nb@x.cl' });
+  Object.assign(tres.banco, { referencia: 'Correo de fecha 01.10.2026', numeroCuenta: '123', banco: 'Otro', bancoOtro: 'Banco Prueba', correos: 'a@x.cl\nb@x.cl' });
   const data = devoluciones.devolucionData(tres, { fecha: HOY, iniciales: 'ERS/yaa' });
   assert.equal(data.fecha, 'OCT.2026');
   assert.equal(data.monto_total, '$ 30');
   assert.deepEqual(data.items[0].tipo_docto, 'EFE 400');
   assert.deepEqual(data.correos, [{ primero: true, correo: 'a@x.cl' }, { primero: false, correo: 'b@x.cl' }]);
-  assert.equal(devoluciones.warnings(tres).filter((w) => !w.includes('por completar')).length, 0);
+  assert.deepEqual(data.banco, [{ n: true, t: 'Banco Prueba' }]);
+  assert.deepEqual(data.referencia, [{ n: true, t: 'Correo de fecha 01.10.2026' }]);
+  assert.ok(data.items[0].observaciones.some((p) => p.m));
+  assert.deepEqual(devoluciones.warnings(tres), []);
   const entry = devoluciones.historialEntry(tres, data, new Date(2026, 9, 19, 9), { fecha: HOY });
   assert.equal(entry.documentos[0].devuelto, 30);
   const idx = movimientos.indice([], [entry]);
   const [pend] = devoluciones.buildGroups(rows, idx);
   assert.equal(pend.rows[0].saldoInicial, 10);
-  assert.match(memo.textoCompleto(pend.rows[0]), /se devolvieron \$ 30, según OF\. \(O\) N°XX/);
+  assert.match(memo.textoCompleto(pend.rows[0]), /se devolvieron \$ 30, según OF\. \(O\) N°\[\[N° oficio\]\]/);
 });
 
 test('devolución: sin datos bancarios deja marcas para completar', () => {
   const [tres] = devoluciones.buildGroups(leer());
   const data = devoluciones.devolucionData(tres, { fecha: HOY });
-  assert.equal(data.referencia, devoluciones.REFERENCIA_BASE);
-  assert.equal(data.banco, glosas.PLACEHOLDER);
+  assert.deepEqual(data.referencia.filter((p) => p.m).map((p) => p.t), ['[correo del cliente]', '[fecha]', '[hora]']);
+  assert.deepEqual(data.banco, [{ m: true, t: '[banco]' }]);
+  assert.ok(devoluciones.BANCOS.includes('BancoEstado'));
   assert.ok(devoluciones.warnings(tres).some((w) => w.includes('REF.')));
 });
 
-test('resumen: empresas total, en memos, en devoluciones, pendientes y banderas', () => {
+test('resumen: empresas total, en memos, en devoluciones, pendientes y listado de pendientes', () => {
   const rows = leer();
   const r = resumen.compute(rows, memo.buildGroups(rows), devoluciones.buildGroups(rows), HOY);
   assert.equal(r.empresasTotal, 5);
   assert.equal(r.empresasMemos, 2);
   assert.equal(r.empresasDevoluciones, 1);
   assert.equal(r.empresasPendientes, 2);
-  assert.deepEqual(r.banderas, { roja: 1, amarilla: 2, verde: 2 });
+  assert.deepEqual(r.listado.map((x) => [x.razon, x.bandera]), [['EMPRESA CUATRO', 'verde'], ['EMPRESA CINCO', 'amarilla']]);
 });
 
 test('elige la hoja de trabajo IPE entre varias hojas y tolera la falta de MI GESTION', () => {

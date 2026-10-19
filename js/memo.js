@@ -37,10 +37,13 @@
     return out;
   }
 
-  /** Texto inicial del MOTIVO / OBSERVACIONES: glosa del TIPO DE IPE o, si no hay, la justificación del Excel. */
+  /**
+   * Texto del MOTIVO / OBSERVACIONES según el TIPO DE IPE del Excel: la glosa correspondiente o, si no hay
+   * tipo, la justificación del Excel; si tampoco hay justificación, un dato [motivo] a completar en el Word.
+   */
   function textoInicial(r) {
-    const g = glosas.porTipo(r.tipoIpe)[0];
-    return { glosaId: g ? g.id : '', texto: g ? g.texto : r.justificacion };
+    const g = glosas.porTipo(r.tipoIpe);
+    return { glosaId: g ? g.id : '', texto: g ? g.texto : (r.justificacion || '[[motivo]]') };
   }
 
   /**
@@ -89,9 +92,6 @@
     for (const r of sel) {
       const id = `${r.doc} ${r.nro}`;
       const { remanente } = calcular(r);
-      if (!r.texto) w.push(`${id}: sin MOTIVO (elige el TIPO DE IPE o escribe la justificación).`);
-      const faltan = glosas.pendientes(r.texto);
-      if (faltan) w.push(`${id}: el MOTIVO tiene ${faltan} dato(s) por completar (<completar por el usuario>).`);
       if (!r.aplicaciones.length) w.push(`${id}: no tiene documentos a aplicar.`);
       if (r.aplicaciones.some((a) => !a.docto || a.monto === '' || !(Number(a.monto) > 0)))
         w.push(`${id}: hay una aplicación sin documento o sin monto.`);
@@ -127,7 +127,7 @@
       razon_social: group.razon,
       rut: group.rutFmt,
       iniciales: opts.iniciales || '',
-      motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: textoCompleto(r) })),
+      motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: glosas.partes(textoCompleto(r)) })),
       items,
       notas,
     };
@@ -180,7 +180,10 @@
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => '' });
     // "primero" marca el documento que lleva el rótulo "MOTIVO :". Se recalcula siempre para que los
     // memos guardados en el historial con versiones anteriores (que no lo traían) se generen completos.
-    const motivos = (data.motivos || []).map((m, i) => ({ ...m, primero: i === 0 }));
+    // Los memos guardados con versiones anteriores traen la justificación como texto: se divide en partes.
+    const motivos = (data.motivos || []).map((m, i) => ({
+      ...m, primero: i === 0, justificacion: typeof m.justificacion === 'string' ? glosas.partes(m.justificacion) : m.justificacion,
+    }));
     doc.render({ ...data, motivos, notas: data.notas || [] });
     return doc.getZip();
   }
