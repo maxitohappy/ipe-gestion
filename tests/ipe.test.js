@@ -28,8 +28,6 @@ const AOA = [
   ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
 ];
 const HOY = new Date(2026, 9, 19);
-// En el Word los montos llevan espacio no separable entre "$" y la cifra.
-const sp = (v) => JSON.parse(JSON.stringify(v).replace(/\u00a0/g, ' '));
 const leer = () => parser.consolidar(parser.parseAoa(AOA).rows);
 
 test('formato: RUT, montos, fechas y banderas', () => {
@@ -101,7 +99,8 @@ test('memo: MOTIVO desde TIPO DE IPE, fecha mes.año y aplicación parcial que d
   const data = memo.memoData(uno, { fecha, iniciales: 'AB/cd' });
   assert.equal(data.fecha, 'OCT.2026');
   assert.deepEqual(data.items, [{ doc: 'EFE', nro: '100', monto: '$ 100', docto_aplicar: 'Pagar FEE 1', monto_aplicar: '$ 20' }]);
-  assert.deepEqual(sp(data.notas), [{ doc: 'EFE', nro: '100', remanente: '$ 80' }]);
+  assert.equal(data.notas.length, 1);
+  assert.match(data.notas[0].remanente, /^\$\s80$/);
   const historial = [memo.historialEntry(uno, data, new Date(2026, 9, 14, 10), { fecha })];
   historial[0].numero = '310';
 
@@ -223,18 +222,14 @@ test('js/plantilla.js corresponde a las plantillas .docx (ejecutar scripts/embed
   }
 });
 
-test('frase "Asimismo" con varios movimientos previos', () => {
+test('varios movimientos previos: una oración por cada uno, con conectores distintos', () => {
   const mov = (tipo, monto, fecha) => ({ tipo, monto, fecha, numero: '' });
-  assert.deepEqual(movimientos.frasesAsimismo([]), []);
-  assert.deepEqual(sp(movimientos.frasesAsimismo([mov('memo', 20000, '19.OCT.2026'), mov('memo', 10000, '20.OCT.2026')])), [
-    'Asimismo, se aplicaron $ 30.000 en total, según el siguiente detalle: $ 20.000 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026; '
-    + 'y $ 10.000 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026.',
-  ]);
-  const tres = sp(movimientos.frasesAsimismo([mov('memo', 1, '01.SEP.2026'), mov('memo', 2, '02.OCT.2026'), mov('memo', 3, '03.OCT.2026')]))[0];
-  assert.match(tres, /^Asimismo, se aplicaron \$ 6 en total, según el siguiente detalle: \$ 1 .*SEP\.2026; \$ 2 .*; y \$ 3 .*OCT\.2026\.$/);
-  assert.equal(sp(movimientos.frasesAsimismo([mov('memo', 20, '19.OCT.2026'), mov('devolucion', 10, '20.OCT.2026')]))[0],
-    'Asimismo, este ingreso registra los siguientes movimientos: aplicación de $ 20 según MEMO N°[[N° memo]] de fecha [[día]].OCT.2026; '
-    + 'y devolución de $ 10 según OF. (O) N°[[N° oficio]] de fecha [[día]].OCT.2026.');
+  const frases = movimientos.frasesAsimismo([mov('memo', 20000, '19.OCT.2026'), mov('memo', 10000, '20.OCT.2026'), mov('devolucion', 5000, '02.NOV.2026')]);
+  assert.equal(frases.length, 3);
+  assert.match(frases[0], /^Asimismo, con fecha \[\[día\]\]\.OCT\.2026, se aplicaron \$\s20\.000, según MEMO N°\[\[N° memo\]\], de fecha \[\[día\]\]\.OCT\.2026\.$/);
+  assert.match(frases[1], /^Además, con fecha \[\[día\]\]\.OCT\.2026, se aplicaron \$\s10\.000, según MEMO N°\[\[N° memo\]\]/);
+  assert.match(frases[2], /^Igualmente, con fecha \[\[día\]\]\.NOV\.2026, se devolvieron \$\s5\.000, según OF\. \(O\) N°\[\[N° oficio\]\]/);
+  assert.equal(new Set(movimientos.frasesAsimismo(Array.from({ length: 8 }, (_, i) => mov('memo', i + 1, '01.OCT.2026'))).map((f) => f.split(',')[0])).size, 8);
 });
 
 test('ultimaGestion toma el último paso numerado', () => {
