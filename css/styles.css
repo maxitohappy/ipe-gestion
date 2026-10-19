@@ -93,7 +93,6 @@ button.link { background: none; border: 0; color: var(--accent); cursor: pointer
 button.icon { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); cursor: pointer; width: 26px; height: 26px; }
 td.apls { min-width: 380px; }
 .prev { margin-top: 4px; font-size: 12px; color: var(--accent); max-width: 260px; }
-.version { display: inline-block; margin-left: 6px; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; }
 .offline-info { font-size: 13px; }
 .offline-info a { color: var(--accent); }
 .notice p { margin: 0 0 8px; }
