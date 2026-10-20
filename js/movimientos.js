@@ -42,9 +42,30 @@
     return idx;
   }
 
+  /** Empresa + documento + número, sin el comprobante. */
+  function claveDocumento(key) {
+    return String(key).split('|').slice(0, 3).join('|');
+  }
+
+  /**
+   * Movimientos previos del IPE. Si no hay ninguno con su comprobante actual (el comprobante puede cambiar
+   * de un mes a otro), se vinculan por empresa + documento + número los movimientos cuyo comprobante ya no
+   * está en el Excel; así no se mezclan dos registros distintos del mismo documento que siguen vigentes.
+   */
+  function previosDe(r, idx, clavesActuales) {
+    const exactos = idx.get(rowKey(r)) || [];
+    if (exactos.length || !clavesActuales) return exactos;
+    const doc = claveDocumento(rowKey(r));
+    const huerfanos = [];
+    for (const [k, lista] of idx) {
+      if (claveDocumento(k) === doc && !clavesActuales.has(k)) huerfanos.push(...lista);
+    }
+    return huerfanos.sort((a, b) => String(a.generado).localeCompare(String(b.generado)));
+  }
+
   /** Saldo pendiente del IPE y movimientos previos registrados para él. */
-  function pendiente(r, idx) {
-    const previos = idx.get(rowKey(r)) || [];
+  function pendiente(r, idx, clavesActuales) {
+    const previos = previosDe(r, idx, clavesActuales);
     const sinProcesar = previos.filter((m) => Math.round(m.saldoExcel) === Math.round(r.saldo));
     const descontado = sinProcesar.reduce((s, m) => s + m.monto, 0);
     return { pendiente: r.saldo - descontado, previos, descontado };
@@ -76,5 +97,5 @@
       });
   }
 
-  return { rowKey, indice, pendiente, frasesAsimismo };
+  return { rowKey, claveDocumento, indice, pendiente, frasesAsimismo };
 });

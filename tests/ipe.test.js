@@ -232,6 +232,26 @@ test('varios movimientos previos: una oración por cada uno, con conectores dist
   assert.equal(new Set(movimientos.frasesAsimismo(Array.from({ length: 8 }, (_, i) => mov('memo', i + 1, '01.OCT.2026'))).map((f) => f.split(',')[0])).size, 8);
 });
 
+test('historial: vincula el IPE aunque cambie el comprobante, sin mezclar registros vigentes del mismo documento', () => {
+  const mes = (filas) => parser.consolidar(parser.parseAoa([HEAD, ...filas]).rows);
+  const fila = (comprob, saldo) => row('Pago en exceso', 'APLICAR', 77777777, 7, 'EMPRESA X', 'EFE', 9, '01-09-2026', saldo, 'ACREEDOR', '', '', comprob);
+  // Septiembre: memo por $40 sobre un IPE de $100 con comprobante 500
+  const [g] = memo.buildGroups(mes([fila(500, 100)]));
+  g.rows[0].aplicaciones = [{ docto: 'Pagar FEE 1', monto: 40 }];
+  const hist = [memo.historialEntry(g, memo.memoData(g, { fecha: new Date(2026, 8, 30) }), new Date(2026, 8, 30), { fecha: new Date(2026, 8, 30) })];
+  const idx = movimientos.indice(hist, []);
+
+  // Octubre: el mismo IPE viene con otro comprobante (900) y saldo sin procesar → sigue vinculado: pendiente $60
+  const [oct] = memo.buildGroups(mes([fila(900, 100)]), idx);
+  assert.equal(oct.rows[0].saldoInicial, 60);
+  assert.equal(oct.rows[0].previos.length, 1);
+
+  // Si el comprobante original sigue en el Excel junto a otro registro del mismo documento, no se mezclan
+  const [ambos] = memo.buildGroups(mes([fila(500, 100), fila(901, 30)]), idx);
+  const porComprob = Object.fromEntries(ambos.rows.map((r) => [r.comprob, [r.saldoInicial, r.previos.length]]));
+  assert.deepEqual(porComprob, { 500: [60, 1], 901: [30, 0] });
+});
+
 test('ultimaGestion toma el último paso numerado', () => {
   assert.equal(parser.ultimaGestion('1) Correo a cliente 2 ) Cliente responde. 12)Correo final'), 'Correo final');
 });

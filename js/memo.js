@@ -52,9 +52,10 @@
    */
   function prepararGrupos(rows, categoria, idx, extra) {
     const pendientes = [];
+    const clavesActuales = new Set(rows.map(rowKey));
     for (const r of rows) {
       if (r.categoria !== categoria || r.naturaleza === 'DEUDOR') continue;
-      const { pendiente, previos } = movimientos.pendiente(r, idx);
+      const { pendiente, previos } = movimientos.pendiente(r, idx, clavesActuales);
       if (pendiente <= 0) continue;
       const { glosaId, texto } = textoInicial(r);
       pendientes.push({ ...r, key: rowKey(r), incluir: true, saldoInicial: pendiente, previos, glosaId, texto, ...extra(r, pendiente) });
