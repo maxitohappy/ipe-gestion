@@ -1,16 +1,13 @@
 // Interfaz: carga del Excel, pestañas, documentos Word (memos y devoluciones) e historiales.
 (function () {
-  const { format: fmt, parser, memo, devoluciones, resumen, movimientos, nube } = window.IPE;
+  const { format: fmt, parser, memo, devoluciones, resumen, movimientos } = window.IPE;
   const $ = (id) => document.getElementById(id);
   const CONFIG_KEY = 'ipe-config';
   const HIST_KEY = 'ipe-historial';
   const HIST_DEV_KEY = 'ipe-historial-devoluciones';
   const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  // modo 'nube': inicio de sesión e historial compartido (Firebase). modo 'local': versión sin internet,
-  // historial guardado solo en este navegador.
-  const state = { modo: 'local', rowsBase: [], rows: [], memoGroups: [], devGroups: [], historial: [], historialDev: [], plantillas: {}, escuchas: [] };
-  const COLECCION = { historial: 'memos', historialDev: 'devoluciones' };
+  const state = { rowsBase: [], rows: [], memoGroups: [], devGroups: [], historial: [], historialDev: [], plantillas: {} };
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clp = (n) => fmt.formatCLP(n);
@@ -153,33 +150,8 @@
 
   function reconstruir() {
     const idx = movimientos.indice(state.historial, state.historialDev);
-    state.memoGroups = conservarEdiciones(memo.buildGroups(state.rows, idx), state.memoGroups, ['incluir', 'aplicaciones']);
-    state.devGroups = conservarEdiciones(devoluciones.buildGroups(state.rows, idx), state.devGroups, ['incluir', 'montoDevolver']);
-  }
-
-  /**
-   * Al recalcular (por ejemplo, cuando otro usuario genera un memo) se conserva lo que el usuario estaba
-   * escribiendo en los IPE cuyo saldo pendiente no cambió, y los datos bancarios de cada empresa.
-   */
-  function conservarEdiciones(nuevos, anteriores, campos) {
-    const filas = new Map();
-    const grupos = new Map();
-    for (const g of anteriores) {
-      grupos.set(g.key, g);
-      for (const r of g.rows) filas.set(r.key, r);
-    }
-    for (const g of nuevos) {
-      const previo = grupos.get(g.key);
-      if (previo && previo.banco && g.banco) g.banco = { ...previo.banco };
-      g.rows = g.rows.map((r) => {
-        const v = filas.get(r.key);
-        if (!v || v.saldoInicial !== r.saldoInicial) return r;
-        const copia = { ...r };
-        for (const k of campos) copia[k] = v[k];
-        return copia;
-      });
-    }
-    return nuevos;
+    state.memoGroups = memo.buildGroups(state.rows, idx);
+    state.devGroups = devoluciones.buildGroups(state.rows, idx);
   }
 
   function renderTodo() {
@@ -377,23 +349,11 @@
     card.querySelector(`[data-warn="${gi}"]`).innerHTML = memo.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
   }
 
-  /** Agrega documentos al historial: en la nube (compartido) o en este navegador (versión sin internet). */
-  async function registrar(lista, entries) {
-    if (state.modo === 'nube') {
-      // La escucha del historial actualiza la pantalla en cuanto se guarda.
-      try { await nube.guardar(COLECCION[lista], entries); } catch (err) {
-        alert(`El Word se descargó, pero no se pudo guardar en el historial compartido: ${nube.mensaje(err)}`);
-      }
-      return;
-    }
-    state[lista].push(...entries);
+  function registrarMemos(entries) {
+    state.historial.push(...entries);
     saveHistoriales();
     reconstruir();
     renderTodo();
-  }
-
-  function registrarMemos(entries) {
-    return registrar('historial', entries);
   }
 
   async function downloadMemo(gi) {
@@ -489,7 +449,10 @@
   }
 
   function registrarDevoluciones(entries) {
-    return registrar('historialDev', entries);
+    state.historialDev.push(...entries);
+    saveHistoriales();
+    reconstruir();
+    renderTodo();
   }
 
   async function downloadDev(gi) {
@@ -523,25 +486,17 @@
 
   // ---------- historiales ----------
   function tablaHistorial(lista, columnaMonto, montoDoc) {
-    return `<table><thead><tr><th>Generado</th><th>Generado por</th><th>Fecha</th><th>Empresa</th><th>RUT</th><th>Documentos (${columnaMonto} / queda pendiente)</th><th></th></tr></thead><tbody>
+    return `<table><thead><tr><th>Generado</th><th>Fecha</th><th>Empresa</th><th>RUT</th><th>Documentos (${columnaMonto} / queda pendiente)</th><th></th></tr></thead><tbody>
       ${lista.map((e) => `<tr>
         <td>${esc(new Date(e.generado).toLocaleString('es-CL'))}</td>
-        <td>${esc(e.creadoPorCorreo || (state.modo === 'local' ? 'este computador' : '—'))}</td>
         <td class="nowrap">${esc(e.fechaCompleta || e.fechaMemo || e.fechaDocumento)}</td>
         <td>${esc(e.empresa)}</td><td class="nowrap">${esc(e.rut)}</td>
         <td>${e.documentos.map((d) => `<b>${esc(d.doc)} ${esc(d.nro)}</b>: ${clp(montoDoc(d))} / ${clp(d.remanente)}`).join('<br>')}</td>
         <td><div class="actions">
           <button class="link" data-redl="${esc(e.id)}">Descargar de nuevo</button>
-          ${puedeDeshacer(e) ? `<button class="link" data-undo="${esc(e.id)}">Volver a pendientes</button>` : ''}
+          <button class="link" data-undo="${esc(e.id)}">Volver a pendientes</button>
         </div></td></tr>`).join('')}
       </tbody></table>`;
-  }
-
-  /** Solo quien generó el documento puede volverlo a pendientes (en la nube lo exigen además las reglas). */
-  function puedeDeshacer(e) {
-    if (state.modo === 'local') return true;
-    const u = nube.usuario();
-    return Boolean(u && e.creadoPor === u.uid);
   }
 
   const ordenar = (lista) => [...lista].sort((a, b) => b.generado.localeCompare(a.generado));
@@ -571,11 +526,7 @@
           const zip = e.tipo === 'devolucion' ? renderDevolucion(e.data) : renderMemo(e.data);
           saveAs(zip.generate({ type: 'blob', mimeType: DOCX_MIME }), e.archivo);
         } catch (err) { alertError(err); }
-      } else if (puedeDeshacer(e) && confirm(`¿Quitar del historial ${nombre} de ${e.empresa}? Sus montos volverán a quedar pendientes.`)) {
-        if (state.modo === 'nube') {
-          nube.eliminar(COLECCION[lista], e.id).catch((err) => alert(nube.mensaje(err)));
-          return;
-        }
+      } else if (confirm(`¿Quitar del historial ${nombre} de ${e.empresa}? Sus montos volverán a quedar pendientes.`)) {
         state[lista] = state[lista].filter((x) => x.id !== e.id);
         saveHistoriales();
         reconstruir();
@@ -607,136 +558,21 @@
       const devs = Array.isArray(json) ? [] : json.historialDevoluciones || [];
       const valido = (l) => Array.isArray(l) && l.every((e) => e.id && Array.isArray(e.documentos));
       if (!valido(memos) || !valido(devs)) throw new Error('El archivo no es un respaldo válido del historial.');
-      const nuevos = (destino, lista) => {
+      const sumar = (destino, nuevos) => {
         const ids = new Set(state[destino].map((e) => e.id));
-        return lista.filter((e) => !ids.has(e.id));
+        const add = nuevos.filter((e) => !ids.has(e.id));
+        state[destino].push(...add);
+        return add.length;
       };
-      const am = nuevos('historial', memos);
-      const ad = nuevos('historialDev', devs);
-      const nm = am.length;
-      const nd = ad.length;
-      if (state.modo === 'nube') {
-        // Los registros importados quedan a nombre de quien los importa.
-        const limpio = (e) => { const c = { ...e }; delete c.creadoPor; delete c.creadoPorCorreo; return c; };
-        if (nm) await nube.guardar('memos', am.map(limpio));
-        if (nd) await nube.guardar('devoluciones', ad.map(limpio));
-      } else {
-        state.historial.push(...am);
-        state.historialDev.push(...ad);
-        saveHistoriales();
-        reconstruir();
-        renderTodo();
-      }
+      const nm = sumar('historial', memos);
+      const nd = sumar('historialDev', devs);
+      saveHistoriales();
+      reconstruir();
+      renderTodo();
       alert(`Se importaron ${nm} memo(s) y ${nd} devolución(es).`);
     } catch (err) {
-      alert(`No se pudo importar: ${state.modo === 'nube' ? nube.mensaje(err) : err.message}`);
+      alert(`No se pudo importar: ${err.message}`);
     }
-  }
-
-  // ---------- acceso (modo nube) ----------
-  /** Muestra una sola vista: 'acceso' (inicio de sesión), 'clave' (cambio de contraseña) o 'app'. */
-  function mostrar(vista) {
-    $('acceso').hidden = vista !== 'acceso';
-    $('cambio-clave').hidden = vista !== 'clave';
-    $('carga').hidden = vista !== 'app';
-    $('contenido').hidden = vista !== 'app' || !state.rows.length;
-  }
-
-  const mensajeEn = (id, texto, ok = false) => {
-    $(id).textContent = texto;
-    $(id).classList.toggle('ok', ok);
-  };
-
-  function detenerEscuchas() {
-    state.escuchas.forEach((fin) => fin());
-    state.escuchas = [];
-  }
-
-  function alActualizarHistorial() {
-    reconstruir();
-    renderTodo();
-  }
-
-  /** Entra a la app con la sesión iniciada y escucha los historiales compartidos en tiempo real. */
-  function entrarApp() {
-    mostrar('app');
-    detenerEscuchas();
-    const error = (err) => alert(`No se pudo leer el historial compartido: ${nube.mensaje(err)}`);
-    state.escuchas = [
-      nube.escuchar('memos', (lista) => { state.historial = lista; alActualizarHistorial(); }, error),
-      nube.escuchar('devoluciones', (lista) => { state.historialDev = lista; alActualizarHistorial(); }, error),
-    ];
-  }
-
-  function pedirCambioClave(obligatorio) {
-    state.cambioObligatorio = obligatorio;
-    $('form-clave').reset();
-    mensajeEn('clave-msg', '');
-    $('cambio-clave-intro').textContent = obligatorio
-      ? 'Es tu primer ingreso: reemplaza la contraseña temporal por una propia (mínimo 8 caracteres).'
-      : 'Ingresa tu contraseña actual y la nueva (mínimo 8 caracteres).';
-    $('clave-actual').previousSibling.textContent = obligatorio ? 'Contraseña actual (temporal)' : 'Contraseña actual';
-    $('btn-cancelar-clave').hidden = obligatorio;
-    mostrar('clave');
-  }
-
-  function iniciarNube() {
-    nube.iniciar();
-    mostrar('');
-    nube.alCambiarSesion(async (u) => {
-      detenerEscuchas();
-      $('barra-usuario').hidden = !u;
-      $('modo-web').hidden = !u;
-      if (!u) {
-        mostrar('acceso');
-        return;
-      }
-      $('usuario-correo').textContent = u.email;
-      try {
-        if (await nube.debeCambiarClave()) return pedirCambioClave(true);
-      } catch (err) {
-        mensajeEn('acceso-msg', nube.mensaje(err));
-      }
-      entrarApp();
-    });
-
-    $('form-ingreso').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      mensajeEn('acceso-msg', 'Ingresando…');
-      try {
-        await nube.ingresar($('ing-correo').value, $('ing-clave').value);
-        mensajeEn('acceso-msg', '');
-        $('form-ingreso').reset();
-      } catch (err) { mensajeEn('acceso-msg', nube.mensaje(err)); }
-    });
-    $('btn-olvide').addEventListener('click', async () => {
-      const correo = $('ing-correo').value.trim();
-      if (!correo) return mensajeEn('acceso-msg', 'Escribe tu correo en el campo "Correo" y vuelve a presionar "¿Olvidaste tu contraseña?".');
-      try {
-        await nube.recuperarClave(correo);
-        mensajeEn('acceso-msg', `Si ${correo} tiene acceso, recibirá un correo con un enlace para crear una nueva contraseña. Revisa también la carpeta de spam.`, true);
-      } catch (err) { mensajeEn('acceso-msg', nube.mensaje(err)); }
-    });
-    $('form-clave').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const actual = $('clave-actual').value;
-      const nueva = $('clave-nueva').value;
-      if (nueva.length < 8) return mensajeEn('clave-msg', 'La nueva contraseña debe tener al menos 8 caracteres.');
-      if (nueva !== $('clave-repetir').value) return mensajeEn('clave-msg', 'Las contraseñas nuevas no coinciden.');
-      if (nueva === actual) return mensajeEn('clave-msg', 'La nueva contraseña debe ser distinta de la actual.');
-      mensajeEn('clave-msg', 'Guardando…');
-      try {
-        await nube.cambiarClave(actual, nueva);
-        alert('Tu contraseña quedó guardada.');
-        entrarApp();
-      } catch (err) { mensajeEn('clave-msg', nube.mensaje(err)); }
-    });
-    $('btn-cambiar-clave').addEventListener('click', () => pedirCambioClave(false));
-    $('btn-cancelar-clave').addEventListener('click', () => mostrar('app'));
-    $('btn-salir').addEventListener('click', async () => {
-      await nube.salir();
-      location.reload(); // limpia de la pantalla los datos del Excel y del historial
-    });
   }
 
   // ---------- eventos ----------
@@ -788,11 +624,11 @@
   }
 
   function init() {
-    state.modo = nube.disponible() ? 'nube' : 'local';
-    $('modo-local').hidden = location.protocol !== 'file:';
+    const local = location.protocol === 'file:';
+    $('modo-local').hidden = !local;
+    $('modo-web').hidden = local;
     loadConfig();
-    if (state.modo === 'nube') iniciarNube();
-    else loadHistoriales();
+    loadHistoriales();
     $('archivo').addEventListener('change', (e) => handleFile(e.target.files[0]));
     const drop = $('carga');
     drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
