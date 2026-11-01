@@ -27,15 +27,14 @@
   }
   function loadConfig() {
     const cfg = readStore(CONFIG_KEY, {});
-    $('cfg-iniciales').value = cfg.iniciales ?? 'ERS/yaa';
     $('cfg-fecha').value = hoyISO();
   }
   function saveConfig() {
-    writeStore(CONFIG_KEY, { iniciales: $('cfg-iniciales').value });
+    writeStore(CONFIG_KEY, {});
   }
   function docOpts() {
     const [y, m, d] = $('cfg-fecha').value.split('-').map(Number);
-    return { fecha: y ? new Date(y, m - 1, d) : new Date(), iniciales: $('cfg-iniciales').value.trim() };
+    return { fecha: y ? new Date(y, m - 1, d) : new Date() };
   }
   function loadHistoriales() {
     const h = readStore(HIST_KEY, []);
@@ -102,6 +101,9 @@
     state.hoja = nombre;
     state.parsed = parsed;
     state.copia = null;
+    // Archivo u hoja nueva: no se arrastran ediciones de la anterior.
+    state.memoGroups = [];
+    state.devGroups = [];
     $('estado-carga').innerHTML = `<span class="ok">✔</span> ${esc(state.libro.nombreArchivo)} — hoja "${esc(nombre)}", ${parsed.rows.length} registros.`;
     $('sel-hoja').innerHTML = state.libro.candidatas.map((h) =>
       `<option value="${esc(h.nombre)}" ${h.nombre === nombre ? 'selected' : ''}>${esc(h.nombre)}${h.tieneEstado ? '' : ' (sin MI GESTION)'}</option>`).join('');
@@ -150,8 +152,40 @@
 
   function reconstruir() {
     const idx = movimientos.indice(state.historial, state.historialDev);
-    state.memoGroups = memo.buildGroups(state.rows, idx);
-    state.devGroups = devoluciones.buildGroups(state.rows, idx);
+    state.memoGroups = conservarEdiciones(memo.buildGroups(state.rows, idx), state.memoGroups, ['incluir', 'aplicaciones']);
+    state.devGroups = conservarEdiciones(devoluciones.buildGroups(state.rows, idx), state.devGroups, ['incluir', 'montoDevolver']);
+  }
+
+  /**
+   * Al recalcular (por ejemplo, después de descargar un anexo) se conserva lo que el usuario ya escribió en las
+   * demás tarjetas: aplicaciones, montos, casillas y datos bancarios. Si una empresa tiene dos anexos (año en
+   * curso y años anteriores) y uno no tiene datos bancarios, toma los del otro.
+   */
+  function conservarEdiciones(nuevos, anteriores, campos) {
+    const filas = new Map();
+    const grupos = new Map();
+    const bancoPorRut = new Map();
+    const conDatos = (b) => b && (b.numeroCuenta || b.banco || b.correos);
+    for (const g of anteriores) {
+      grupos.set(g.key, g);
+      if (conDatos(g.banco)) bancoPorRut.set(`${g.rut}-${g.dv}`, g.banco);
+      for (const r of g.rows) filas.set(`${g.key}|${r.key}`, r);
+    }
+    for (const g of nuevos) {
+      const previo = grupos.get(g.key);
+      if (g.banco) {
+        const propio = previo && conDatos(previo.banco) ? previo.banco : bancoPorRut.get(`${g.rut}-${g.dv}`);
+        if (propio) g.banco = { ...propio };
+      }
+      g.rows = g.rows.map((r) => {
+        const v = filas.get(`${g.key}|${r.key}`);
+        if (!v || v.saldoInicial !== r.saldoInicial) return r;
+        const copia = { ...r };
+        for (const k of campos) copia[k] = v[k];
+        return copia;
+      });
+    }
+    return nuevos;
   }
 
   function renderTodo() {
@@ -271,8 +305,16 @@
     }
     return state.plantillas[nombre];
   }
-  const renderMemo = (data) => memo.render(plantilla('plantillaB64'), data, PizZip, window.docxtemplater);
-  const renderDevolucion = (data) => devoluciones.render(plantilla('plantillaDevolucionB64'), data, PizZip, window.docxtemplater);
+  // Formato del anexo según el período de los IPE: año en curso o años anteriores.
+  const PLANTILLAS = {
+    aplicacion: { actual: 'plantillaAplicacionActual', anterior: 'plantillaAplicacionAnterior' },
+    devolucion: { actual: 'plantillaDevolucionActual', anterior: 'plantillaDevolucionAnterior' },
+  };
+  const renderMemo = (data) => memo.render(plantilla(PLANTILLAS.aplicacion[data.periodo === 'anterior' ? 'anterior' : 'actual']), data, PizZip, window.docxtemplater);
+  const renderDevolucion = (data) => devoluciones.render(plantilla(PLANTILLAS.devolucion[data.periodo === 'anterior' ? 'anterior' : 'actual']), data, PizZip, window.docxtemplater);
+  const periodoHtml = (g) => (g.periodo === 'anterior'
+    ? '<span class="periodo anterior">Formato años anteriores</span>'
+    : '<span class="periodo actual">Formato año en curso</span>');
 
   // ---------- memos ----------
   function renderMemos() {
@@ -293,7 +335,7 @@
     return `
       <div class="card" data-g="${gi}">
         <div class="memo-head">
-          <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span></h3>
+          <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span> ${periodoHtml(g)}</h3>
           <button class="secondary" data-download="${gi}">Descargar Word</button>
         </div>
         <div class="scroll">
@@ -343,9 +385,9 @@
       fin.classList.toggle('neg', remanente < 0);
     });
     const data = memo.memoData(g, docOpts());
-    const notas = data.notas.map((n) => `Nota: Diferencia de ${esc(n.doc)} ${esc(n.nro)} por ${esc(n.remanente)}.- mantener en la cuenta…`).join('<br>');
+    const notas = data.notas.map((n) => `Nota: La diferencia del IPE ${esc(n.doc)} ${esc(n.nro)} por ${esc(n.remanente)}. - mantener en la cuenta…`).join('<br>');
     card.querySelector(`[data-preview="${gi}"]`).innerHTML =
-      `<div><b>Fecha en el memo:</b> SANTIAGO, ${esc(data.fecha)} · <b>Filas en la tabla:</b> ${data.items.length}</div>${notas ? `<div>${notas}</div>` : ''}`;
+      `<div><b>Filas en la tabla del anexo:</b> ${data.items.length}</div>${notas ? `<div>${notas}</div>` : ''}`;
     card.querySelector(`[data-warn="${gi}"]`).innerHTML = memo.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
   }
 
@@ -401,7 +443,7 @@
     return `
       <div class="card" data-g="${gi}">
         <div class="memo-head">
-          <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span></h3>
+          <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span> ${periodoHtml(g)}</h3>
           <button class="secondary" data-download="${gi}">Descargar Word</button>
         </div>
         <div class="scroll">
@@ -421,7 +463,6 @@
         </table>
         </div>
         <div class="form banco">
-          <label class="ancho">REF.<input type="text" data-b="referencia" value="${esc(b.referencia)}" placeholder="Correo electrónico … de fecha dd.mm.aaaa a las hh:mm hrs."></label>
           <label>Tipo de cuenta<select data-b="tipoCuenta">${devoluciones.TIPOS_CUENTA.map((t) => `<option ${t === b.tipoCuenta ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
           <label>Número de cuenta<input type="text" data-b="numeroCuenta" value="${esc(b.numeroCuenta)}"></label>
           <label>Banco<select data-b="banco"><option value="">Selecciona el banco</option>${devoluciones.BANCOS.map((n) => `<option ${n === b.banco ? 'selected' : ''}>${esc(n)}</option>`).join('')}<option ${b.banco === 'Otro' ? 'selected' : ''}>Otro</option></select>
@@ -444,7 +485,7 @@
     });
     const data = devoluciones.devolucionData(g, docOpts());
     card.querySelector(`[data-preview="${gi}"]`).innerHTML =
-      `<div><b>Fecha en el oficio:</b> SANTIAGO, ${esc(data.fecha)} · <b>Monto de devolución:</b> ${esc(data.monto_total)}</div>`;
+      `<div><b>Monto de devolución:</b> ${esc(data.monto_total)}</div>`;
     card.querySelector(`[data-warn="${gi}"]`).innerHTML = devoluciones.warnings(g).map((w) => `<li>${esc(w)}</li>`).join('');
   }
 
@@ -647,7 +688,6 @@
     $('btn-hoja-trabajo').addEventListener('click', () => {
       try { descargarHojaTrabajo(); } catch (err) { mostrarError(err); }
     });
-    $('cfg-iniciales').addEventListener('change', saveConfig);
     $('cfg-fecha').addEventListener('change', () => {
       state.memoGroups.forEach((g, gi) => refreshMemo(gi));
       state.devGroups.forEach((g, gi) => refreshDev(gi));

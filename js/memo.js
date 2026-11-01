@@ -13,14 +13,31 @@
 })(typeof self !== 'undefined' ? self : this, function (fmt, glosas, movimientos) {
   const { rowKey } = movimientos;
 
-  function groupByEmpresa(rows) {
+  /**
+   * Formato del anexo según la fecha del IPE: 'actual' (año en curso) o 'anterior' (años anteriores).
+   * Cada formato tiene su propia plantilla y su propia forma de escribir montos y la cuenta.
+   */
+  function periodo(r, hoy = new Date()) {
+    return r.fecha && r.fecha.getFullYear() < hoy.getFullYear() ? 'anterior' : 'actual';
+  }
+
+  const ORDEN_PERIODO = { actual: 0, anterior: 1 };
+
+  /** Agrupa por empresa (y por período: una empresa con IPE de ambos períodos genera dos anexos). */
+  function groupByEmpresa(rows, conPeriodo = false) {
     const map = new Map();
     for (const r of rows) {
-      const key = `${r.rut}-${r.dv}`;
-      if (!map.has(key)) map.set(key, { key, rut: r.rut, dv: r.dv, rutFmt: r.rutFmt, razon: r.razon, rows: [] });
+      const key = conPeriodo ? `${r.rut}-${r.dv}|${r.periodo}` : `${r.rut}-${r.dv}`;
+      if (!map.has(key)) map.set(key, { key, rut: r.rut, dv: r.dv, rutFmt: r.rutFmt, razon: r.razon, periodo: r.periodo, rows: [] });
       map.get(key).rows.push(r);
     }
-    return [...map.values()].sort((a, b) => a.razon.localeCompare(b.razon, 'es'));
+    return [...map.values()].sort((a, b) => a.razon.localeCompare(b.razon, 'es')
+      || (ORDEN_PERIODO[a.periodo] ?? 0) - (ORDEN_PERIODO[b.periodo] ?? 0));
+  }
+
+  /** Montos como en cada formato: "$1.070" (año en curso) o "$ 1.070" (años anteriores). */
+  function monto(n, per) {
+    return per === 'anterior' ? `$ ${fmt.miles(n)}` : `$${fmt.miles(n)}`;
   }
 
   /**
@@ -58,9 +75,9 @@
       const { pendiente, previos } = movimientos.pendiente(r, idx, clavesActuales);
       if (pendiente <= 0) continue;
       const { glosaId, texto } = textoInicial(r);
-      pendientes.push({ ...r, key: rowKey(r), incluir: true, saldoInicial: pendiente, previos, glosaId, texto, ...extra(r, pendiente) });
+      pendientes.push({ ...r, key: rowKey(r), periodo: periodo(r), incluir: true, saldoInicial: pendiente, previos, glosaId, texto, ...extra(r, pendiente) });
     }
-    return groupByEmpresa(pendientes);
+    return groupByEmpresa(pendientes, true);
   }
 
   /** Grupos de memo: empresas con IPE en APLICAR y saldo pendiente. `idx` es movimientos.indice(...). */
@@ -101,33 +118,34 @@
     return w;
   }
 
-  /** Datos que consume la plantilla templates/memo_template.docx */
+  /** Datos que consume la plantilla del anexo de aplicación (templates/aplicacion_actual|anterior.docx). */
   function memoData(group, opts) {
+    const per = group.periodo || 'actual';
     const sel = group.rows.filter((r) => r.incluir);
     const items = [];
     const notas = [];
     for (const r of sel) {
       const { pasos, remanente } = calcular(r);
       if (!pasos.length) {
-        items.push({ doc: r.doc, nro: r.nro, monto: fmt.formatCLP(r.saldoInicial ?? r.saldo), docto_aplicar: '', monto_aplicar: '' });
+        items.push({ doc: r.doc, nro: r.nro, monto: monto(r.saldoInicial ?? r.saldo, per), docto_aplicar: '', monto_aplicar: '' });
         continue;
       }
       for (const p of pasos) {
         items.push({
           doc: r.doc,
           nro: r.nro,
-          monto: fmt.formatCLP(p.saldoAntes),
+          monto: monto(p.saldoAntes, per),
           docto_aplicar: p.docto,
-          monto_aplicar: p.monto ? fmt.formatCLP(p.monto) : '',
+          monto_aplicar: p.monto ? monto(p.monto, per) : '',
         });
       }
-      if (remanente > 0) notas.push({ doc: r.doc, nro: r.nro, remanente: fmt.formatCLP(remanente).replace(' ', '\u00A0') });
+      if (remanente > 0) notas.push({ doc: r.doc, nro: r.nro, remanente: monto(remanente, per).replace(' ', '\u00A0') });
     }
     return {
+      periodo: per,
       fecha: fmt.fechaMesAnio(opts.fecha),
       razon_social: group.razon,
       rut: group.rutFmt,
-      iniciales: opts.iniciales || '',
       motivos: sel.map((r, i) => ({ primero: i === 0, doc: r.doc, nro: r.nro, justificacion: glosas.partes(textoCompleto(r)) })),
       items,
       notas,
@@ -140,14 +158,14 @@
    */
   function nombreArchivo(prefijo, group, fecha = new Date(), ahora = new Date()) {
     const base = group.razon.normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '') + (group.periodo === 'anterior' ? '_anios_anteriores' : '');
     const dos = (n) => String(n).padStart(2, '0');
     const f = `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
     return `${prefijo}_${base}_${group.rut}_${f}_${dos(ahora.getHours())}${dos(ahora.getMinutes())}${dos(ahora.getSeconds())}.docx`;
   }
 
   function fileName(group, fecha) {
-    return nombreArchivo('MEMO_IPE', group, fecha);
+    return nombreArchivo('ANEXO_APLICACION', group, fecha);
   }
 
   /** Registro para el historial de memos: guarda lo necesario para volver a descargarlo y calcular saldos. */
@@ -190,7 +208,7 @@
   }
 
   return {
-    rowKey, groupByEmpresa, parseAplicaciones, textoInicial, prepararGrupos, buildGroups, calcular, textoCompleto,
+    rowKey, periodo, monto, groupByEmpresa, parseAplicaciones, textoInicial, prepararGrupos, buildGroups, calcular, textoCompleto,
     warnings, memoData, nombreArchivo, fileName, historialEntry, render,
   };
 });

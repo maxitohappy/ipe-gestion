@@ -18,12 +18,11 @@
     'HSBC Bank Chile', 'Banco BTG Pactual', 'JP Morgan Chase Bank', 'Banco de la Nación Argentina', 'Bank of China',
     'China Construction Bank', 'MUFG Bank', 'Tenpo', 'Coopeuch', 'Mercado Pago', 'Prepago Los Héroes',
   ];
-  const REFERENCIA_BASE = 'Correo electrónico [[correo del cliente]] de fecha [[fecha]] a las [[hora]] hrs.';
 
   /** Grupos de devolución: empresas con IPE en DEVOLVER y saldo pendiente. */
   function buildGroups(rows, idx = new Map()) {
     return memo.prepararGrupos(rows, 'DEVOLVER', idx, (r, pendiente) => ({ montoDevolver: pendiente }))
-      .map((g) => ({ ...g, banco: { referencia: '', tipoCuenta: TIPOS_CUENTA[0], numeroCuenta: '', banco: '', bancoOtro: '', correos: '' } }));
+      .map((g) => ({ ...g, banco: { tipoCuenta: TIPOS_CUENTA[0], numeroCuenta: '', banco: '', bancoOtro: '', correos: '' } }));
   }
 
   function total(group) {
@@ -49,7 +48,6 @@
       if (Number(r.montoDevolver) > r.saldoInicial) w.push(`${id}: el monto a devolver supera el saldo pendiente (${fmt.formatCLP(r.saldoInicial)}).`);
     }
     const b = group.banco;
-    if (!b.referencia.trim()) w.push('Falta la REF. (correo del cliente con fecha y hora).');
     if (!b.numeroCuenta.trim() || !nombreBanco(b)) w.push('Faltan datos bancarios (banco y número de cuenta).');
     if (!correos(b.correos).length) w.push('Falta al menos un correo electrónico del cliente.');
     return w;
@@ -57,31 +55,35 @@
 
   /** Datos que consume la plantilla templates/devolucion_template.docx */
   function devolucionData(group, opts) {
+    const per = group.periodo || 'actual';
+    // Montos como en cada formato: "$90.666.-" (año en curso) o "$ 158.182" (años anteriores).
+    const montoDev = (n) => (per === 'anterior' ? `$ ${fmt.miles(n)}` : `$${fmt.miles(n)}.-`);
     const sel = group.rows.filter((r) => r.incluir);
     const b = group.banco;
     const lista = correos(b.correos);
     return {
+      periodo: per,
       fecha: fmt.fechaMesAnio(opts.fecha),
-      referencia: glosas.partes(b.referencia.trim() || REFERENCIA_BASE),
       rut: group.rutFmt,
       razon_social: group.razon,
       items: sel.map((r) => ({
         cf: r.cf,
         tipo_docto: `${r.doc} ${r.nro}`,
-        monto: fmt.formatCLP(Number(r.montoDevolver) || 0),
+        monto: montoDev(Number(r.montoDevolver) || 0),
         observaciones: glosas.partes(memo.textoCompleto(r)),
       })),
       tipo_cuenta: glosas.partes(b.tipoCuenta || '[[tipo de cuenta]]'),
       numero_cuenta: glosas.partes(b.numeroCuenta.trim() || '[[N° de cuenta]]'),
       banco: glosas.partes(nombreBanco(b) || '[[banco]]'),
-      monto_total: fmt.formatCLP(total(group)),
+      monto_total: montoDev(total(group)),
+      // Año en curso: un correo por línea. Años anteriores: en una línea separados por "; ".
       correos: (lista.length ? lista : ['[correo]']).map((correo, i) => ({ primero: i === 0, correo })),
-      iniciales: opts.iniciales || '',
+      correos_linea: lista.length ? lista.join('; ') : '[correo]',
     };
   }
 
   function fileName(group, fecha) {
-    return memo.nombreArchivo('DEVOLUCION_IPE', group, fecha);
+    return memo.nombreArchivo('ANEXO_DEVOLUCION', group, fecha);
   }
 
   /** Registro para el historial de devoluciones. */
@@ -116,7 +118,6 @@
     const aPartes = (v) => (typeof v === 'string' ? glosas.partes(v) : v);
     doc.render({
       ...data,
-      referencia: aPartes(data.referencia),
       tipo_cuenta: aPartes(data.tipo_cuenta),
       numero_cuenta: aPartes(data.numero_cuenta),
       banco: aPartes(data.banco),
@@ -125,5 +126,5 @@
     return doc.getZip();
   }
 
-  return { TIPOS_CUENTA, BANCOS, REFERENCIA_BASE, buildGroups, total, nombreBanco, correos, warnings, devolucionData, fileName, historialEntry, render };
+  return { TIPOS_CUENTA, BANCOS, buildGroups, total, nombreBanco, correos, warnings, devolucionData, fileName, historialEntry, render };
 });

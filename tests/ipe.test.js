@@ -150,11 +150,13 @@ test('devolución: observaciones por TIPO DE IPE, datos bancarios, devolución p
   Object.assign(tres.banco, { referencia: 'Correo de fecha 01.10.2026', numeroCuenta: '123', banco: 'Otro', bancoOtro: 'Banco Prueba', correos: 'a@x.cl\nb@x.cl' });
   const data = devoluciones.devolucionData(tres, { fecha: HOY, iniciales: 'ERS/yaa' });
   assert.equal(data.fecha, 'OCT.2026');
-  assert.equal(data.monto_total, '$ 30');
+  assert.equal(data.periodo, 'actual');
+  assert.equal(data.monto_total, '$30.-');
+  assert.equal(data.items[0].monto, '$30.-');
+  assert.equal(data.correos_linea, 'a@x.cl; b@x.cl');
   assert.deepEqual(data.items[0].tipo_docto, 'EFE 400');
   assert.deepEqual(data.correos, [{ primero: true, correo: 'a@x.cl' }, { primero: false, correo: 'b@x.cl' }]);
   assert.deepEqual(data.banco, [{ n: true, t: 'Banco Prueba' }]);
-  assert.deepEqual(data.referencia, [{ n: true, t: 'Correo de fecha 01.10.2026' }]);
   assert.ok(data.items[0].observaciones.some((p) => p.m));
   assert.deepEqual(devoluciones.warnings(tres), []);
   const entry = devoluciones.historialEntry(tres, data, new Date(2026, 9, 19, 9), { fecha: HOY });
@@ -168,10 +170,11 @@ test('devolución: observaciones por TIPO DE IPE, datos bancarios, devolución p
 test('devolución: sin datos bancarios deja marcas para completar', () => {
   const [tres] = devoluciones.buildGroups(leer());
   const data = devoluciones.devolucionData(tres, { fecha: HOY });
-  assert.deepEqual(data.referencia.filter((p) => p.m).map((p) => p.t), ['[correo del cliente]', '[fecha]', '[hora]']);
   assert.deepEqual(data.banco, [{ m: true, t: '[banco]' }]);
   assert.ok(devoluciones.BANCOS.includes('BancoEstado'));
-  assert.ok(devoluciones.warnings(tres).some((w) => w.includes('REF.')));
+  assert.deepEqual(data.numero_cuenta, [{ m: true, t: '[N° de cuenta]' }]);
+  assert.equal(data.correos_linea, '[correo]');
+  assert.ok(devoluciones.warnings(tres).some((w) => w.includes('datos bancarios')));
 });
 
 test('resumen: empresas total, en memos, en devoluciones, pendientes y listado de pendientes', () => {
@@ -216,7 +219,8 @@ test('reconoce la columna ACREEDOR/DEUDOR aunque no tenga encabezado', () => {
 
 test('js/plantilla.js corresponde a las plantillas .docx (ejecutar scripts/embed_template.py si falla)', () => {
   const js = fs.readFileSync(path.join(__dirname, '../js/plantilla.js'), 'utf8');
-  for (const [nombre, archivo] of [['plantillaB64', 'memo_template.docx'], ['plantillaDevolucionB64', 'devolucion_template.docx']]) {
+  for (const [nombre, archivo] of [['plantillaAplicacionActual', 'aplicacion_actual.docx'], ['plantillaAplicacionAnterior', 'aplicacion_anterior.docx'],
+    ['plantillaDevolucionActual', 'devolucion_actual.docx'], ['plantillaDevolucionAnterior', 'devolucion_anterior.docx']]) {
     const b64 = js.match(new RegExp(`${nombre} = "([^"]+)"`))[1];
     assert.ok(Buffer.from(b64, 'base64').equals(fs.readFileSync(path.join(__dirname, '../templates', archivo))), archivo);
   }
@@ -250,6 +254,34 @@ test('historial: vincula el IPE aunque cambie el comprobante, sin mezclar regist
   const [ambos] = memo.buildGroups(mes([fila(500, 100), fila(901, 30)]), idx);
   const porComprob = Object.fromEntries(ambos.rows.map((r) => [r.comprob, [r.saldoInicial, r.previos.length]]));
   assert.deepEqual(porComprob, { 500: [60, 1], 901: [30, 0] });
+});
+
+test('formato del anexo según el año del IPE (año en curso / años anteriores)', () => {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  const f = (y) => `15-03-${y}`;
+  const aoa = [HEAD,
+    row('Pago en exceso', 'APLICAR', 66666666, 6, 'EMPRESA MIXTA', 'EFE', 1, f(anio), 1000, 'ACREEDOR'),
+    row('Pago en exceso', 'APLICAR', 66666666, 6, 'EMPRESA MIXTA', 'EFE', 2, f(anio - 1), 2000, 'ACREEDOR'),
+    row('Pago duplicado', 'DEVOLVER', 77777777, 7, 'EMPRESA DEV', 'EFE', 3, f(anio - 2), 158182, 'ACREEDOR')];
+  const rows = parser.consolidar(parser.parseAoa(aoa).rows);
+  // Una empresa con IPE de ambos períodos genera dos anexos: primero el del año en curso
+  const grupos = memo.buildGroups(rows);
+  assert.deepEqual(grupos.map((g) => [g.razon, g.periodo, g.rows.map((r) => r.nro)]),
+    [['EMPRESA MIXTA', 'actual', ['1']], ['EMPRESA MIXTA', 'anterior', ['2']]]);
+  grupos.forEach((g) => { g.rows[0].aplicaciones = [{ docto: 'Pagar FEE 9', monto: 300 }]; });
+  const [act, ant] = grupos.map((g) => memo.memoData(g, { fecha: hoy }));
+  assert.equal(act.periodo, 'actual');
+  assert.deepEqual([act.items[0].monto, act.items[0].monto_aplicar], ['$1.000', '$300']);
+  assert.equal(ant.periodo, 'anterior');
+  assert.deepEqual([ant.items[0].monto, ant.items[0].monto_aplicar], ['$ 2.000', '$ 300']);
+  assert.match(memo.fileName(grupos[1], hoy), /^ANEXO_APLICACION_EMPRESA_MIXTA_anios_anteriores_66666666_/);
+  // Devolución de años anteriores: montos "$ 158.182" y correos en una línea
+  const [dev] = devoluciones.buildGroups(rows);
+  assert.equal(dev.periodo, 'anterior');
+  dev.banco.correos = 'a@x.cl, b@x.cl';
+  const d = devoluciones.devolucionData(dev, { fecha: hoy });
+  assert.deepEqual([d.periodo, d.items[0].monto, d.monto_total, d.correos_linea], ['anterior', '$ 158.182', '$ 158.182', 'a@x.cl; b@x.cl']);
 });
 
 test('ultimaGestion toma el último paso numerado', () => {

@@ -5,7 +5,7 @@
 *.csv
 *.doc
 *.pdf
-!templates/memo_template.docx
+!templates/*.docx
 node_modules/
 
 # Script de construcción de plantilla: contiene textos del memo original (solo local)

@@ -1,4 +1,4 @@
-"""Incrusta las plantillas Word en js/plantilla.js (base64).
+"""Incrusta las plantillas Word de los anexos en js/plantilla.js (base64).
 
 Así la app no necesita descargar las plantillas y funciona también abriendo index.html
 directamente desde el computador, sin internet (los navegadores bloquean fetch en file://).
@@ -11,15 +11,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLANTILLAS = {
-    'plantillaB64': ROOT / 'templates' / 'memo_template.docx',
-    'plantillaDevolucionB64': ROOT / 'templates' / 'devolucion_template.docx',
+    'plantillaAplicacionActual': 'aplicacion_actual.docx',
+    'plantillaAplicacionAnterior': 'aplicacion_anterior.docx',
+    'plantillaDevolucionActual': 'devolucion_actual.docx',
+    'plantillaDevolucionAnterior': 'devolucion_anterior.docx',
 }
 DST = ROOT / 'js' / 'plantilla.js'
 
 lineas = ['// Generado por scripts/embed_template.py a partir de templates/*.docx. No editar a mano.',
           'self.IPE = self.IPE || {};']
-for nombre, ruta in PLANTILLAS.items():
+for nombre, archivo in PLANTILLAS.items():
+    ruta = ROOT / 'templates' / archivo
     b64 = base64.b64encode(ruta.read_bytes()).decode('ascii')
     lineas.append(f'self.IPE.{nombre} = "{b64}";')
-    print(f'{ruta.name}: {len(b64)} caracteres')
+    print(f'{archivo}: {len(b64)} caracteres')
 DST.write_text('\n'.join(lineas) + '\n', encoding='utf-8')
