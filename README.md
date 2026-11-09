@@ -28,7 +28,7 @@ Usa la misma herramienta de Lector de Boletas: Claude a través de un backend en
 
 - **Memos:** con **Leer correo (imagen)** (arriba o en la tarjeta), la app identifica al cliente por RUT o razón social, recorre sus IPE incluidos y asigna los documentos en el orden del correo: *Pagar* si el saldo cubre el documento y *Abonar* si cubre una parte. Advierte si el saldo o el RUT del correo difieren del Excel.
 - **Devoluciones:** con **Leer datos bancarios (imagen)** se completan tipo de cuenta, número, banco y correos (excluye los de la DGAC). Advierte si el beneficiario tiene otro RUT.
-- **Datos bancarios guardados:** al descargar el Word quedan guardados por RUT en este navegador (se incluyen en el respaldo). En una devolución futura aparece *"Este cliente registra los siguientes datos bancarios… ¿Confirma?"*: **Sí** los pasa a la tarjeta y al Word; **No** pide subir la imagen.
+- **Datos bancarios guardados:** al descargar el Word quedan guardados por RUT en este navegador (se incluyen en el respaldo). Siguen disponibles al cargar el Excel de otro mes. Si queda saldo pendiente tras una devolución parcial, o surge una devolución futura, aparece *"Este cliente registra los siguientes datos bancarios… ¿Confirma?"*: **Sí** los pasa a la tarjeta y al Word; **No** pide subir la imagen.
 
 ### Saldo pendiente entre meses
 

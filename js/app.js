@@ -416,6 +416,16 @@
     state.bancos[claveRut(g)] = { ...g.banco, razon: g.razon, fecha: hoyISO() };
   }
 
+  /** Tras generar el Word, el saldo pendiente del cliente vuelve a pedir confirmación de los datos guardados. */
+  function pedirConfirmacionBanco(generados) {
+    const ruts = new Set(generados.filter((g) => state.bancos[claveRut(g)]).map(claveRut));
+    state.devGroups.filter((o) => ruts.has(claveRut(o))).forEach((o) => {
+      o.banco = { tipoCuenta: devoluciones.TIPOS_CUENTA[0], numeroCuenta: '', banco: '', bancoOtro: '', correos: '' };
+      o.bancoDecision = undefined;
+      o.lectura = undefined;
+    });
+  }
+
   function textoBanco(b) {
     const banco = b.banco === 'Otro' ? b.bancoOtro : b.banco;
     return [`${b.tipoCuenta} N° ${b.numeroCuenta}`, banco, b.correos && b.correos.split('\n').join(', ')].filter(Boolean).join(' · ');
@@ -635,7 +645,9 @@
       const data = devoluciones.devolucionData(g, opts);
       saveAs(renderDevolucion(data).generate({ type: 'blob', mimeType: DOCX_MIME }), devoluciones.fileName(g, opts.fecha));
       recordarBanco(g);
-      registrarDevoluciones([devoluciones.historialEntry(g, data, new Date(), opts)]);
+      const entrada = devoluciones.historialEntry(g, data, new Date(), opts);
+      pedirConfirmacionBanco([g]);
+      registrarDevoluciones([entrada]);
     } catch (err) { alertError(err); }
   }
 
@@ -643,6 +655,7 @@
     try {
       const out = new PizZip();
       const entries = [];
+      const generados = [];
       const ahora = new Date();
       const opts = docOpts();
       for (const g of state.devGroups) {
@@ -651,9 +664,11 @@
         out.file(devoluciones.fileName(g, opts.fecha), renderDevolucion(data).generate({ type: 'uint8array' }));
         entries.push(devoluciones.historialEntry(g, data, ahora, opts));
         recordarBanco(g);
+        generados.push(g);
       }
       if (!entries.length) return;
       saveAs(out.generate({ type: 'blob' }), `Devoluciones_IPE_${$('cfg-fecha').value}.zip`);
+      pedirConfirmacionBanco(generados);
       registrarDevoluciones(entries);
     } catch (err) { alertError(err); }
   }
