@@ -24,25 +24,33 @@
   // ---------- documentos a aplicar ----------
   /** Nombre del documento como en los formatos: "FEE 464037", "ND N° 54549" (año en curso) o "NDE 54195" (años anteriores). */
   function nombreDocumento(d, periodo) {
-    const t = String(d.tipo).toUpperCase();
-    if (t === 'FE' || t === 'FEE') return `FEE ${d.numero}`;
-    if (t === 'ND' || t === 'NDE') return periodo === 'anterior' ? `NDE ${d.numero}` : `ND N° ${d.numero}`;
-    return `${t} ${d.numero}`;
+    const t = normalizar(d.tipo);
+    const numero = String(d.numero ?? '').trim();
+    let nombre = t;
+    if (t === 'FE' || t === 'FEE' || t.startsWith('FACT')) nombre = 'FEE';
+    else if (t === 'ND' || t === 'NDE' || t.startsWith('NOTA DE DEBITO')) nombre = periodo === 'anterior' ? 'NDE' : 'ND N°';
+    return `${nombre} ${numero}`.trim();
   }
 
   /**
    * Asigna los documentos a los IPE, en orden: cada IPE se va descontando documento por documento.
    * "Pagar" si cubre lo que falta del documento; "Abonar" si solo alcanza para una parte (lo que falta pasa al IPE
-   * siguiente). `ipes`: [{ saldo, periodo }]. Devuelve las aplicaciones de cada IPE y lo que no alcanzó a cubrirse.
+   * siguiente). Un documento sin monto queda con el monto en blanco para completarlo, sin descontar saldo.
+   * `ipes`: [{ saldo, periodo }]. Devuelve las aplicaciones de cada IPE y lo que no alcanzó a cubrirse.
    */
   function asignar(ipes, docs) {
-    const pendientes = docs.filter((d) => Number(d.monto) > 0).map((d) => ({ d, resta: Number(d.monto) }));
+    const pendientes = docs.map((d) => ({ d, resta: Number(d.monto) > 0 ? Number(d.monto) : null }));
     let i = 0;
     const aplicaciones = ipes.map((ipe) => {
       let saldo = ipe.saldo;
       const lista = [];
       while (saldo > 0 && i < pendientes.length) {
         const p = pendientes[i];
+        if (p.resta === null) {
+          lista.push({ docto: `Pagar ${nombreDocumento(p.d, ipe.periodo)}`, monto: '' });
+          i += 1;
+          continue;
+        }
         const monto = Math.min(saldo, p.resta);
         const cubre = monto === p.resta;
         lista.push({ docto: `${cubre ? 'Pagar' : 'Abonar'} ${nombreDocumento(p.d, ipe.periodo)}`, monto });
@@ -52,7 +60,7 @@
       }
       return lista;
     });
-    return { aplicaciones, sinCubrir: pendientes.slice(i) };
+    return { aplicaciones, sinCubrir: pendientes.slice(i).filter((p) => p.resta !== null) };
   }
 
   /** Tarjetas del cliente del correo: por RUT y, si no se leyó, por razón social. Años anteriores primero. */
@@ -68,13 +76,17 @@
   /** Advertencias de una lectura de documentos, ya asignada. `saldoIpe`: saldo sumado de los IPE incluidos. */
   function avisosDocumentos(lectura, destino, saldoIpe, sinCubrir, fmtCLP) {
     const a = [];
-    if (!lectura.contiene_documentos) a.push('La imagen no parece un correo con documentos por pagar.');
+    const docs = lectura.documentos || [];
+    const nombre = (d) => `${d.tipo} ${d.numero}`.trim() || 'documento sin identificar';
+    if (!docs.length) a.push('No se encontraron documentos a aplicar en la imagen. Los datos de la tarjeta no se modificaron.');
     if (lectura.rut_cliente && rutLimpio(lectura.rut_cliente) !== rutDeGrupo(destino)) a.push(`El RUT del correo (${lectura.rut_cliente}) no coincide con el de este cliente.`);
     if (lectura.saldo_a_favor !== null && lectura.saldo_a_favor !== undefined && lectura.saldo_a_favor !== saldoIpe) {
       a.push(`El correo informa un saldo a favor de ${fmtCLP(lectura.saldo_a_favor)}; el saldo de los IPE incluidos es ${fmtCLP(saldoIpe)}.`);
     }
-    const sinMonto = (lectura.documentos || []).filter((d) => !(Number(d.monto) > 0));
-    if (sinMonto.length) a.push(`No se leyó el monto de: ${sinMonto.map((d) => `${d.tipo} ${d.numero}`).join(', ')}.`);
+    const sinMonto = docs.filter((d) => !(Number(d.monto) > 0));
+    if (sinMonto.length) a.push(`Completa el monto de: ${sinMonto.map(nombre).join(', ')}.`);
+    const sinNumero = docs.filter((d) => !String(d.numero ?? '').trim());
+    if (sinNumero.length) a.push('Completa el número del documento: la imagen no lo indica.');
     if (sinCubrir.length) a.push(`El saldo no alcanzó para: ${sinCubrir.map((p) => `${p.d.tipo} ${p.d.numero} (falta ${fmtCLP(p.resta)})`).join(', ')}.`);
     if (lectura.imagen_cortada) a.push('La imagen parece cortada: revisa si faltan documentos.');
     if (lectura.observaciones) a.push(lectura.observaciones);

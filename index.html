@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261112">
+  <link rel="stylesheet" href="css/styles.css?v=20261113">
 </head>
 <body>
   <header class="top">
@@ -85,7 +85,7 @@
             <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
           </span>
         </div>
-        <p class="muted aviso-imagen">Sube la imagen del correo con los documentos a aplicar: la app reconoce al cliente y asocia sus IPE con los documentos. Las imágenes se envían a Claude (Anthropic) para leerlas; no se guardan en la app.</p>
+        <p class="muted aviso-imagen">Sube la imagen del correo con los documentos a aplicar (tabla o frase, como "aplicar a Factura 1234 los $50"): la app asocia los IPE del cliente con los documentos. Si la imagen no indica el cliente, usa el botón de su tarjeta. Las imágenes se envían a Claude (Anthropic) para leerlas; no se guardan en la app.</p>
         <p class="lectura-global" id="lectura-memos" role="status"></p>
         <div id="memos"></div>
       </div>
@@ -127,20 +127,20 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261112"></script>
-  <script src="vendor/pizzip.min.js?v=20261112"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261112"></script>
-  <script src="vendor/FileSaver.min.js?v=20261112"></script>
-  <script src="js/format.js?v=20261112"></script>
-  <script src="js/glosas.js?v=20261112"></script>
-  <script src="js/movimientos.js?v=20261112"></script>
-  <script src="js/parser.js?v=20261112"></script>
-  <script src="js/memo.js?v=20261112"></script>
-  <script src="js/devoluciones.js?v=20261112"></script>
-  <script src="js/resumen.js?v=20261112"></script>
-  <script src="js/extraccion.js?v=20261112"></script>
-  <script src="js/lectura.js?v=20261112"></script>
-  <script src="js/plantilla.js?v=20261112"></script>
-  <script src="js/app.js?v=20261112"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261113"></script>
+  <script src="vendor/pizzip.min.js?v=20261113"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261113"></script>
+  <script src="vendor/FileSaver.min.js?v=20261113"></script>
+  <script src="js/format.js?v=20261113"></script>
+  <script src="js/glosas.js?v=20261113"></script>
+  <script src="js/movimientos.js?v=20261113"></script>
+  <script src="js/parser.js?v=20261113"></script>
+  <script src="js/memo.js?v=20261113"></script>
+  <script src="js/devoluciones.js?v=20261113"></script>
+  <script src="js/resumen.js?v=20261113"></script>
+  <script src="js/extraccion.js?v=20261113"></script>
+  <script src="js/lectura.js?v=20261113"></script>
+  <script src="js/plantilla.js?v=20261113"></script>
+  <script src="js/app.js?v=20261113"></script>
 </body>
 </html>

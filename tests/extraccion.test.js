@@ -29,9 +29,24 @@ test('asignar reparte un documento entre dos IPE', () => {
   ]);
 });
 
-test('asignar omite documentos sin monto y usa NDE en años anteriores', () => {
+test('asignar deja en blanco el monto que no viene y usa NDE en años anteriores', () => {
   const r = ex.asignar([{ saldo: 100, periodo: 'anterior' }], [{ tipo: 'FE', numero: '1', monto: null }, { tipo: 'ND', numero: '2', monto: 100 }]);
-  assert.deepEqual(r.aplicaciones[0], [{ docto: 'Pagar NDE 2', monto: 100 }]);
+  assert.deepEqual(r.aplicaciones[0], [{ docto: 'Pagar FEE 1', monto: '' }, { docto: 'Pagar NDE 2', monto: 100 }]);
+  assert.equal(r.sinCubrir.length, 0);
+});
+
+test('frase suelta: factura con monto menor al saldo, o sin número', () => {
+  const r = ex.asignar([{ saldo: 28, periodo: 'actual' }], [{ tipo: 'Factura', numero: '1234', monto: 28 }]);
+  assert.deepEqual(r.aplicaciones[0], [{ docto: 'Pagar FEE 1234', monto: 28 }]);
+  assert.equal(ex.nombreDocumento({ tipo: 'FEE', numero: '' }, 'actual'), 'FEE');
+  assert.equal(ex.nombreDocumento({ tipo: '', numero: '' }, 'actual'), '');
+  assert.equal(ex.nombreDocumento({ tipo: 'Nota de débito', numero: '5' }, 'actual'), 'ND N° 5');
+});
+
+test('avisosDocumentos: una frase sin RUT ni saldo no genera advertencias', () => {
+  const l = { rut_cliente: '', saldo_a_favor: null, documentos: [{ tipo: 'FE', numero: '1', monto: 5 }], imagen_cortada: false, observaciones: '' };
+  assert.deepEqual(ex.avisosDocumentos(l, { rut: '1', dv: '9' }, 5, [], fmt.formatCLP), []);
+  assert.match(ex.avisosDocumentos({ ...l, documentos: [] }, { rut: '1', dv: '9' }, 5, [], fmt.formatCLP)[0], /No se encontraron/);
 });
 
 test('gruposDelCliente busca por RUT, luego por razón social, años anteriores primero', () => {
@@ -47,10 +62,10 @@ test('gruposDelCliente busca por RUT, luego por razón social, años anteriores 
 
 test('avisosDocumentos advierte RUT, saldo distinto, faltantes e imagen cortada', () => {
   const g = { rut: '10000000', dv: '8' };
-  const lectura = { contiene_documentos: true, rut_cliente: '999-9', saldo_a_favor: 10, documentos: [{ tipo: 'FE', numero: '1', monto: null }], imagen_cortada: true, observaciones: '' };
+  const lectura = { rut_cliente: '999-9', saldo_a_favor: 10, documentos: [{ tipo: 'FE', numero: '1', monto: null }], imagen_cortada: true, observaciones: '' };
   const a = ex.avisosDocumentos(lectura, g, 20, [{ d: { tipo: 'FE', numero: '2' }, resta: 5 }], fmt.formatCLP);
   assert.equal(a.length, 5);
-  const sinAvisos = { contiene_documentos: true, rut_cliente: '10000000-8', saldo_a_favor: 20, documentos: [], imagen_cortada: false, observaciones: '' };
+  const sinAvisos = { rut_cliente: '10000000-8', saldo_a_favor: 20, documentos: [{ tipo: 'FE', numero: '1', monto: 5 }], imagen_cortada: false, observaciones: '' };
   assert.deepEqual(ex.avisosDocumentos(sinAvisos, g, 20, [], fmt.formatCLP), []);
 });
 

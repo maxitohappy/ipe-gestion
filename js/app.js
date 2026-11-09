@@ -364,10 +364,11 @@
   /** Reparte los documentos leídos en los IPE incluidos de las tarjetas del cliente. Devuelve false si el usuario cancela. */
   function aplicarDocumentos(destinos, l, imagen) {
     const filas = destinos.flatMap((g) => g.rows.filter((r) => r.incluir).map((r) => ({ g, r })));
+    const leidos = l.documentos || [];
     const conDocumentos = filas.some(({ r }) => r.aplicaciones.some((a) => a.docto || a.monto));
-    if (conDocumentos && !confirm('Este cliente ya tiene documentos a aplicar. ¿Reemplazarlos por los de la imagen?')) return false;
-    const { aplicaciones, sinCubrir } = extraccion.asignar(filas.map(({ g, r }) => ({ saldo: r.saldoInicial, periodo: g.periodo })), l.documentos || []);
-    filas.forEach(({ r }, i) => { r.aplicaciones = aplicaciones[i]; });
+    if (leidos.length && conDocumentos && !confirm('Este cliente ya tiene documentos a aplicar. ¿Reemplazarlos por los de la imagen?')) return false;
+    const { aplicaciones, sinCubrir } = extraccion.asignar(filas.map(({ g, r }) => ({ saldo: r.saldoInicial, periodo: g.periodo })), leidos);
+    if (leidos.length) filas.forEach(({ r }, i) => { r.aplicaciones = aplicaciones[i]; });
     const saldo = filas.reduce((s, { r }) => s + r.saldoInicial, 0);
     const avisos = extraccion.avisosDocumentos(l, destinos[0], saldo, sinCubrir, clp);
     const n = (l.documentos || []).length;
@@ -384,7 +385,7 @@
       const delCliente = extraccion.gruposDelCliente(datos, state.memoGroups);
       if (!propia && !delCliente.length) {
         const quien = [datos.razon_social, datos.rut_cliente].filter(Boolean).join(', RUT ');
-        throw new Error(quien ? `no hay memos pendientes de ${quien}.` : 'no se identificó al cliente en la imagen. Usa el botón de la tarjeta del cliente.');
+        throw new Error(quien ? `no hay memos pendientes de ${quien}.` : 'la imagen no indica el cliente. Busca al cliente y usa el botón "Leer correo (imagen)" de su tarjeta.');
       }
       const destinos = propia && !delCliente.includes(propia) ? [propia] : delCliente;
       const aplicado = aplicarDocumentos(destinos, datos, imagen);
