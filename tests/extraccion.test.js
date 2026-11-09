@@ -58,6 +58,8 @@ test('bancoSelector reconoce nombres y deja el resto en Otro', () => {
   assert.equal(ex.bancoSelector('Banco Internacional').banco, 'Banco Internacional');
   assert.equal(ex.bancoSelector('BANCO DEL ESTADO DE CHILE').banco, 'BancoEstado');
   assert.equal(ex.bancoSelector('Banco de Chile').banco, 'Banco de Chile');
+  assert.equal(ex.bancoSelector('BANCO CHILE').banco, 'Banco de Chile');
+  assert.equal(ex.bancoSelector('Banco de Chile Edwards').banco, 'Banco Edwards');
   assert.equal(ex.bancoSelector('Banco de Crédito e Inversiones').banco, 'Banco BCI');
   assert.equal(ex.bancoSelector('Itaú').banco, 'Banco Itaú');
   assert.deepEqual(ex.bancoSelector('Banco Nuevo'), { banco: 'Otro', bancoOtro: 'Banco Nuevo' });

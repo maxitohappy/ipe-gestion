@@ -133,7 +133,7 @@ input[type="search"] { font: inherit; color: var(--text); background: var(--surf
 .aviso-imagen { margin: 6px 0; font-size: 13px; }
 .lectura-global:empty { display: none; }
 .lectura-global { margin: 6px 0; font-size: 13px; }
-.lectura-global.neg, .lectura.neg { color: var(--danger); }
+.lectura-global.neg, .lectura.neg { color: var(--danger); font-weight: 600; }
 .lectura { margin: 6px 0; font-size: 13px; }
 .lectura img { display: block; max-width: 100%; margin-top: 6px; border: 1px solid var(--border); border-radius: 4px; }
 .lectura summary { cursor: pointer; }

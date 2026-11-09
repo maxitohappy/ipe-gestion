@@ -340,12 +340,15 @@
       </div>`;
   }
 
-  /** Muestra "Leyendo…" mientras dura la lectura y bloquea los botones de imagen. */
+  /**
+   * Muestra "Leyendo…" mientras dura la lectura y bloquea los botones de imagen y de descarga: un Word descargado
+   * antes de que termine saldría sin los datos de la imagen.
+   */
   async function conLectura(aviso, botones, fn) {
-    const lista = [...botones];
+    const lista = [...botones].filter((b) => !b.disabled);
     lista.forEach((b) => { b.disabled = true; });
     aviso.classList.remove('neg');
-    aviso.textContent = 'Leyendo la imagen con Claude… puede tardar unos segundos.';
+    aviso.textContent = 'Leyendo la imagen con Claude… espera unos segundos para descargar el Word.';
     try {
       await fn();
       aviso.textContent = '';
@@ -376,7 +379,7 @@
   async function leerDocumentos(file, gi) {
     const propia = gi === undefined ? null : state.memoGroups[gi];
     const aviso = propia ? document.querySelector(`#memos [data-g="${gi}"] [data-lectura]`) : $('lectura-memos');
-    await conLectura(aviso, document.querySelectorAll('#tab-memos [data-img], #btn-img-memos'), async () => {
+    await conLectura(aviso, document.querySelectorAll('#tab-memos [data-img], #tab-memos [data-download], #btn-img-memos, #btn-zip'), async () => {
       const { datos, imagen } = await lectura.leer('leer_documentos', file);
       const delCliente = extraccion.gruposDelCliente(datos, state.memoGroups);
       if (!propia && !delCliente.length) {
@@ -396,7 +399,7 @@
   async function leerBanco(file, gi) {
     const g = state.devGroups[gi];
     const card = document.querySelector(`#devoluciones [data-g="${gi}"]`);
-    await conLectura(card.querySelector('[data-lectura]'), document.querySelectorAll('#tab-devoluciones [data-img]'), async () => {
+    await conLectura(card.querySelector('[data-lectura]'), document.querySelectorAll('#tab-devoluciones [data-img], #tab-devoluciones [data-download], #btn-zip-dev'), async () => {
       const { datos, imagen } = await lectura.leer('leer_banco', file);
       state.devGroups.filter((o) => claveRut(o) === claveRut(g)).forEach((o) => {
         o.banco = extraccion.aplicarBanco(o.banco, datos);
