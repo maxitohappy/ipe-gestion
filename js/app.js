@@ -137,7 +137,7 @@
   function usarFilas(rowsBase, tieneEstado) {
     state.rowsBase = rowsBase;
     // Un mismo IPE con movimientos DEUDOR y ACREEDOR se muestra como un solo registro con el saldo neto.
-    state.rows = parser.consolidar(rowsBase);
+    state.rows = parser.vigentes(parser.consolidar(rowsBase));
     state.tieneEstado = tieneEstado;
     reconstruir();
 

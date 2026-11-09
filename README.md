@@ -9,7 +9,7 @@ Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE
 Hoja de trabajo con, entre otras, las columnas: `TIPO DE IPE` (B), `MI GESTION` (C), `C.F.`, `COD. AUX.`, `DV`, `RAZÓN SOCIAL`, `DOC.`, `NRO.`, `COMPROB.`, `FECHA`, `SALDO`, `XX` (ACREEDOR/DEUDOR), `Justificación Ingreso anticipado` y `Gestión realizada`.
 
 - Las columnas se reconocen por su nombre: el orden y el nombre de la hoja pueden cambiar.
-- `MI GESTION` indica el estado (`APLICAR`, `DEVOLVER`, `correo enviado …`). También se acepta el nombre anterior `MIS APUNTES`.
+- `MI GESTION` indica el estado. También se acepta el nombre anterior `MIS APUNTES`. Si contiene *aplicar* o *aplicación* el registro va a **Memos**; si contiene *devolver* o *devolución* va a **Devoluciones** (si nombra ambas, queda pendiente). Si dice *finalizado*, no se considera en los totales ni se muestra.
 - `TIPO DE IPE` debe coincidir con un tipo del documento GLOSAS: *Pago en exceso, Pago duplicado, Depósito sin identificar, Nota de Crédito, Error en pago, Regularización, Anulación RLE*. "Error en pago" tiene tres redacciones: `Error en pago` (o `Error en pago 1`), `Error en pago 2` y `Error en pago 3`. Si el tipo está vacío, el MOTIVO usa la columna *Justificación*.
 - Si el libro trae varias hojas (por ejemplo, el mayor contable), la app usa la hoja de trabajo IPE; se puede cambiar con el selector **Hoja del Excel**.
 - La columna ACREEDOR/DEUDOR se reconoce aunque venga sin el encabezado `XX`.

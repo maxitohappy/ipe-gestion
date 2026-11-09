@@ -284,6 +284,26 @@ test('formato del anexo según el año del IPE (año en curso / años anteriores
   assert.deepEqual([d.periodo, d.items[0].monto, d.monto_total, d.correos_linea], ['anterior', '$ 158.182', '$ 158.182', 'a@x.cl; b@x.cl']);
 });
 
+test('categoria reconoce aplicación, devolución y finalizados', () => {
+  for (const e of ['APLICAR', 'aplicar saldo', 'Aplicación', 'para aplicacion FEE 1']) assert.equal(parser.categoria(e), 'APLICAR', e);
+  for (const e of ['DEVOLVER', 'devolver al cliente', 'Devolución', 'solicita devolucion']) assert.equal(parser.categoria(e), 'DEVOLVER', e);
+  for (const e of ['Finalizado', 'FINALIZADOS', 'finalizada', 'finalizado devolución']) assert.equal(parser.categoria(e), 'FINALIZADO', e);
+  for (const e of ['aplicar o devolver', 'aplicado', 'devuelto', 'correo enviado 01-10']) assert.notEqual(['APLICAR', 'DEVOLVER'].includes(parser.categoria(e)), true, e);
+});
+
+test('los finalizados quedan fuera del cálculo de empresas', () => {
+  const base = { dv: '1', doc: 'EFE', naturaleza: 'ACREEDOR', saldo: 10, fecha: new Date(2026, 0, 1) };
+  const rows = [
+    { ...base, rut: '1', razon: 'SOLO FINALIZADA', nro: '1', estado: 'finalizado', categoria: 'FINALIZADO' },
+    { ...base, rut: '2', razon: 'MIXTA', nro: '2', estado: 'finalizado', categoria: 'FINALIZADO' },
+    { ...base, rut: '2', razon: 'MIXTA', nro: '3', estado: 'REVISAR CORREO', categoria: 'REVISAR CORREO' },
+  ];
+  const v = parser.vigentes(parser.consolidar(rows));
+  const r = resumen.compute(v, [], []);
+  assert.equal(r.empresasTotal, 1);
+  assert.deepEqual(r.listado.map((x) => x.nro), ['3']);
+});
+
 test('ultimaGestion toma el último paso numerado', () => {
   assert.equal(parser.ultimaGestion('1) Correo a cliente 2 ) Cliente responde. 12)Correo final'), 'Correo final');
 });

@@ -39,8 +39,13 @@
     const s = String(estado ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
       .toUpperCase().replace(/\s+/g, ' ').trim();
     if (!s) return 'SIN ESTADO';
-    if (s === 'APLICAR') return 'APLICAR';
-    if (s === 'DEVOLVER') return 'DEVOLVER';
+    if (/\bFINALIZAD[OA]S?\b/.test(s)) return 'FINALIZADO';
+    const aplicar = /\b(?:APLICAR|APLICACION(?:ES)?)\b/.test(s);
+    const devolver = /\b(?:DEVOLVER|DEVOLUCION(?:ES)?)\b/.test(s);
+    // Si nombra ambas ("aplicar o devolver") la decisión sigue pendiente: no se clasifica.
+    if (aplicar && devolver) return 'OTRO';
+    if (aplicar) return 'APLICAR';
+    if (devolver) return 'DEVOLVER';
     if (s.startsWith('CORREO ENVIADO')) return 'CORREO ENVIADO';
     if (s.startsWith('REVISAR CORREO')) return 'REVISAR CORREO';
     if (s.startsWith('SIN CONTACTO')) return 'SIN CONTACTO';
@@ -248,6 +253,9 @@
     return salida;
   }
 
+  /** Los registros finalizados no se consideran en los cálculos ni se muestran. */
+  const vigentes = (rows) => rows.filter((r) => r.categoria !== 'FINALIZADO');
+
   /** Último paso numerado de "Gestión realizada" (ej. "19) Correo enviado..."). */
   function ultimaGestion(texto) {
     const s = String(texto ?? '').trim();
@@ -256,5 +264,5 @@
     return partes[partes.length - 1].replace(/^\d{1,2}\s?\)\s?/, '');
   }
 
-  return { parseAoa, analizarHoja, elegirHoja, copiarEstados, consolidar, categoria, ultimaGestion, COLUMNS };
+  return { parseAoa, analizarHoja, elegirHoja, copiarEstados, consolidar, vigentes, categoria, ultimaGestion, COLUMNS };
 });
