@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestión IPE</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261101">
+  <link rel="stylesheet" href="css/styles.css?v=20261109">
 </head>
 <body>
   <header class="top">
@@ -79,8 +79,14 @@
         <div class="row-between">
           <input type="search" id="buscar-memos" placeholder="Buscar por RUT o empresa" aria-label="Buscar memos por RUT o empresa">
           <p class="muted" id="memos-resumen"></p>
-          <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
+          <span class="actions">
+            <button id="btn-img-memos" class="secondary">Leer correo (imagen)</button>
+            <input type="file" id="img-memos" accept="image/*" hidden aria-label="Imagen del correo con los documentos a aplicar">
+            <button id="btn-zip" class="primary">Descargar todos los memos (.zip)</button>
+          </span>
         </div>
+        <p class="muted aviso-imagen">Sube la imagen del correo con los documentos a aplicar: la app reconoce al cliente y asocia sus IPE con los documentos. Las imágenes se envían a Claude (Anthropic) para leerlas; no se guardan en la app.</p>
+        <p class="lectura-global" id="lectura-memos" role="status"></p>
         <div id="memos"></div>
       </div>
 
@@ -91,6 +97,7 @@
           <p class="muted" id="dev-resumen"></p>
           <button id="btn-zip-dev" class="primary">Descargar todas las devoluciones (.zip)</button>
         </div>
+        <p class="muted aviso-imagen">En cada tarjeta puedes subir la imagen del correo con los datos bancarios. Las imágenes se envían a Claude (Anthropic) para leerlas; no se guardan en la app. Los datos bancarios confirmados quedan guardados en este navegador por RUT al descargar el Word.</p>
         <div id="devoluciones"></div>
       </div>
 
@@ -120,18 +127,20 @@
     </section>
   </main>
 
-  <script src="vendor/xlsx.full.min.js?v=20261101"></script>
-  <script src="vendor/pizzip.min.js?v=20261101"></script>
-  <script src="vendor/docxtemplater.min.js?v=20261101"></script>
-  <script src="vendor/FileSaver.min.js?v=20261101"></script>
-  <script src="js/format.js?v=20261101"></script>
-  <script src="js/glosas.js?v=20261101"></script>
-  <script src="js/movimientos.js?v=20261101"></script>
-  <script src="js/parser.js?v=20261101"></script>
-  <script src="js/memo.js?v=20261101"></script>
-  <script src="js/devoluciones.js?v=20261101"></script>
-  <script src="js/resumen.js?v=20261101"></script>
-  <script src="js/plantilla.js?v=20261101"></script>
-  <script src="js/app.js?v=20261101"></script>
+  <script src="vendor/xlsx.full.min.js?v=20261109"></script>
+  <script src="vendor/pizzip.min.js?v=20261109"></script>
+  <script src="vendor/docxtemplater.min.js?v=20261109"></script>
+  <script src="vendor/FileSaver.min.js?v=20261109"></script>
+  <script src="js/format.js?v=20261109"></script>
+  <script src="js/glosas.js?v=20261109"></script>
+  <script src="js/movimientos.js?v=20261109"></script>
+  <script src="js/parser.js?v=20261109"></script>
+  <script src="js/memo.js?v=20261109"></script>
+  <script src="js/devoluciones.js?v=20261109"></script>
+  <script src="js/resumen.js?v=20261109"></script>
+  <script src="js/extraccion.js?v=20261109"></script>
+  <script src="js/lectura.js?v=20261109"></script>
+  <script src="js/plantilla.js?v=20261109"></script>
+  <script src="js/app.js?v=20261109"></script>
 </body>
 </html>

@@ -1,13 +1,14 @@
 // Interfaz: carga del Excel, pestañas, documentos Word (memos y devoluciones) e historiales.
 (function () {
-  const { format: fmt, parser, memo, devoluciones, resumen, movimientos } = window.IPE;
+  const { format: fmt, parser, memo, devoluciones, resumen, movimientos, extraccion, lectura } = window.IPE;
   const $ = (id) => document.getElementById(id);
   const CONFIG_KEY = 'ipe-config';
   const HIST_KEY = 'ipe-historial';
   const HIST_DEV_KEY = 'ipe-historial-devoluciones';
+  const BANCOS_KEY = 'ipe-datos-bancarios';
   const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const state = { rowsBase: [], rows: [], memoGroups: [], devGroups: [], historial: [], historialDev: [], plantillas: {} };
+  const state = { rowsBase: [], rows: [], memoGroups: [], devGroups: [], historial: [], historialDev: [], bancos: {}, plantillas: {} };
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clp = (n) => fmt.formatCLP(n);
@@ -41,9 +42,11 @@
     const hd = readStore(HIST_DEV_KEY, []);
     state.historial = Array.isArray(h) ? h : [];
     state.historialDev = Array.isArray(hd) ? hd : [];
+    const bancos = readStore(BANCOS_KEY, {});
+    state.bancos = bancos && typeof bancos === 'object' && !Array.isArray(bancos) ? bancos : {};
   }
   function saveHistoriales() {
-    const ok = writeStore(HIST_KEY, state.historial) && writeStore(HIST_DEV_KEY, state.historialDev);
+    const ok = writeStore(HIST_KEY, state.historial) && writeStore(HIST_DEV_KEY, state.historialDev) && writeStore(BANCOS_KEY, state.bancos);
     if (!ok) alert('No se pudo guardar el historial en este navegador. Descarga un respaldo para no perderlo.');
   }
 
@@ -161,11 +164,11 @@
    * demás tarjetas: aplicaciones, montos, casillas y datos bancarios. Si una empresa tiene dos anexos (año en
    * curso y años anteriores) y uno no tiene datos bancarios, toma los del otro.
    */
+  const conDatos = (b) => b && (b.numeroCuenta || b.banco || b.correos);
   function conservarEdiciones(nuevos, anteriores, campos) {
     const filas = new Map();
     const grupos = new Map();
     const bancoPorRut = new Map();
-    const conDatos = (b) => b && (b.numeroCuenta || b.banco || b.correos);
     for (const g of anteriores) {
       grupos.set(g.key, g);
       if (conDatos(g.banco)) bancoPorRut.set(`${g.rut}-${g.dv}`, g.banco);
@@ -173,6 +176,10 @@
     }
     for (const g of nuevos) {
       const previo = grupos.get(g.key);
+      if (previo) {
+        g.lectura = previo.lectura;
+        g.bancoDecision = previo.bancoDecision;
+      }
       if (g.banco) {
         const propio = previo && conDatos(previo.banco) ? previo.banco : bancoPorRut.get(`${g.rut}-${g.dv}`);
         if (propio) g.banco = { ...propio };
@@ -316,6 +323,124 @@
     ? '<span class="periodo anterior">Formato años anteriores</span>'
     : '<span class="periodo actual">Formato año en curso</span>');
 
+  // ---------- lectura de imágenes de correos ----------
+  const claveRut = (g) => `${g.rut}-${g.dv}`;
+
+  function botonImagenHtml(texto) {
+    return `<button class="secondary" data-img>${texto}</button><input type="file" data-img-input accept="image/*" hidden aria-label="${texto}">`;
+  }
+
+  /** Resultado de la última lectura de la tarjeta: la imagen, para comparar, y lo que hay que revisar. */
+  function lecturaHtml(g) {
+    const l = g.lectura;
+    if (!l) return '<div class="lectura" data-lectura></div>';
+    return `<div class="lectura" data-lectura>
+        <details><summary>${esc(l.resumen)} Revisa los datos antes de descargar. <b>Ver imagen</b></summary><img src="${l.imagen}" alt="Imagen del correo leída"></details>
+        ${l.avisos.length ? `<ul class="warnings">${l.avisos.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}
+      </div>`;
+  }
+
+  /** Muestra "Leyendo…" mientras dura la lectura y bloquea los botones de imagen. */
+  async function conLectura(aviso, botones, fn) {
+    const lista = [...botones];
+    lista.forEach((b) => { b.disabled = true; });
+    aviso.classList.remove('neg');
+    aviso.textContent = 'Leyendo la imagen con Claude… puede tardar unos segundos.';
+    try {
+      await fn();
+      aviso.textContent = '';
+    } catch (err) {
+      console.error(err);
+      aviso.classList.add('neg');
+      aviso.textContent = `No se pudo leer la imagen: ${err.message}`;
+    } finally {
+      lista.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  /** Reparte los documentos leídos en los IPE incluidos de las tarjetas del cliente. Devuelve false si el usuario cancela. */
+  function aplicarDocumentos(destinos, l, imagen) {
+    const filas = destinos.flatMap((g) => g.rows.filter((r) => r.incluir).map((r) => ({ g, r })));
+    const conDocumentos = filas.some(({ r }) => r.aplicaciones.some((a) => a.docto || a.monto));
+    if (conDocumentos && !confirm('Este cliente ya tiene documentos a aplicar. ¿Reemplazarlos por los de la imagen?')) return false;
+    const { aplicaciones, sinCubrir } = extraccion.asignar(filas.map(({ g, r }) => ({ saldo: r.saldoInicial, periodo: g.periodo })), l.documentos || []);
+    filas.forEach(({ r }, i) => { r.aplicaciones = aplicaciones[i]; });
+    const saldo = filas.reduce((s, { r }) => s + r.saldoInicial, 0);
+    const avisos = extraccion.avisosDocumentos(l, destinos[0], saldo, sinCubrir, clp);
+    const n = (l.documentos || []).length;
+    destinos.forEach((g, i) => { g.lectura = { imagen, resumen: `Se leyeron ${n} documento(s) del correo.`, avisos: i ? [] : avisos }; });
+    return true;
+  }
+
+  /** Lee un correo con documentos a aplicar. Sin tarjeta (`gi`), identifica al cliente por lo que dice el correo. */
+  async function leerDocumentos(file, gi) {
+    const propia = gi === undefined ? null : state.memoGroups[gi];
+    const aviso = propia ? document.querySelector(`#memos [data-g="${gi}"] [data-lectura]`) : $('lectura-memos');
+    await conLectura(aviso, document.querySelectorAll('#tab-memos [data-img], #btn-img-memos'), async () => {
+      const { datos, imagen } = await lectura.leer('leer_documentos', file);
+      const delCliente = extraccion.gruposDelCliente(datos, state.memoGroups);
+      if (!propia && !delCliente.length) {
+        const quien = [datos.razon_social, datos.rut_cliente].filter(Boolean).join(', RUT ');
+        throw new Error(quien ? `no hay memos pendientes de ${quien}.` : 'no se identificó al cliente en la imagen. Usa el botón de la tarjeta del cliente.');
+      }
+      const destinos = propia && !delCliente.includes(propia) ? [propia] : delCliente;
+      const aplicado = aplicarDocumentos(destinos, datos, imagen);
+      if (aplicado) $('buscar-memos').value = '';
+      renderMemos();
+      if (!aplicado) return;
+      document.querySelector(`#memos [data-g="${state.memoGroups.indexOf(destinos[0])}"]`).scrollIntoView({ block: 'start' });
+    });
+  }
+
+  /** Lee un correo con datos bancarios y los lleva a las tarjetas del mismo RUT. */
+  async function leerBanco(file, gi) {
+    const g = state.devGroups[gi];
+    const card = document.querySelector(`#devoluciones [data-g="${gi}"]`);
+    await conLectura(card.querySelector('[data-lectura]'), document.querySelectorAll('#tab-devoluciones [data-img]'), async () => {
+      const { datos, imagen } = await lectura.leer('leer_banco', file);
+      state.devGroups.filter((o) => claveRut(o) === claveRut(g)).forEach((o) => {
+        o.banco = extraccion.aplicarBanco(o.banco, datos);
+        o.bancoDecision = 'imagen';
+      });
+      g.lectura = { imagen, resumen: 'Datos bancarios leídos del correo.', avisos: extraccion.avisosBanco(datos, g) };
+      renderDevoluciones();
+    });
+  }
+
+  /** Datos bancarios verificados por el usuario: se guardan por RUT al generar el Word. */
+  function recordarBanco(g) {
+    if (!g.banco.numeroCuenta) return;
+    state.bancos[claveRut(g)] = { ...g.banco, razon: g.razon, fecha: hoyISO() };
+  }
+
+  function textoBanco(b) {
+    const banco = b.banco === 'Otro' ? b.bancoOtro : b.banco;
+    return [`${b.tipoCuenta} N° ${b.numeroCuenta}`, banco, b.correos && b.correos.split('\n').join(', ')].filter(Boolean).join(' · ');
+  }
+
+  /** Mensaje de confirmación cuando el cliente ya registra datos bancarios y la tarjeta aún no tiene. */
+  function bancoGuardadoHtml(g) {
+    const guardado = state.bancos[claveRut(g)];
+    if (!guardado || conDatos(g.banco) || g.bancoDecision) return '';
+    return `<div class="banco-guardado">
+        <span>Este cliente registra los siguientes datos bancarios: <b>${esc(textoBanco(guardado))}</b>. ¿Confirma?</span>
+        <span class="actions"><button class="primary" data-banco-si>Sí</button> <button class="secondary" data-banco-no>No</button></span>
+      </div>`;
+  }
+
+  function decidirBanco(g, gi, confirma) {
+    const guardado = state.bancos[claveRut(g)];
+    state.devGroups.filter((o) => claveRut(o) === claveRut(g)).forEach((o) => {
+      if (confirma) {
+        const { tipoCuenta, numeroCuenta, banco, bancoOtro, correos } = guardado;
+        o.banco = { tipoCuenta, numeroCuenta, banco, bancoOtro, correos };
+      }
+      o.bancoDecision = confirma ? 'si' : 'no';
+    });
+    renderDevoluciones();
+    if (!confirma) document.querySelector(`#devoluciones [data-g="${gi}"] [data-img-input]`).click();
+  }
+
   // ---------- memos ----------
   function renderMemos() {
     const groups = state.memoGroups;
@@ -336,8 +461,9 @@
       <div class="card" data-g="${gi}">
         <div class="memo-head">
           <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span> ${periodoHtml(g)}</h3>
-          <button class="secondary" data-download="${gi}">Descargar Word</button>
+          <span class="actions">${botonImagenHtml('Leer correo (imagen)')} <button class="secondary" data-download="${gi}">Descargar Word</button></span>
         </div>
+        ${lecturaHtml(g)}
         <div class="scroll">
         <table>
           <thead><tr><th>Incluir</th><th>Categoría</th><th>Doc.</th><th>Nro.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>TIPO DE IPE</th><th>Documentos a aplicar · monto · saldo que queda</th><th class="n">Saldo final</th></tr></thead>
@@ -444,8 +570,10 @@
       <div class="card" data-g="${gi}">
         <div class="memo-head">
           <h3>${esc(g.razon)} <span class="muted">· RUT ${esc(g.rutFmt)}</span> ${periodoHtml(g)}</h3>
-          <button class="secondary" data-download="${gi}">Descargar Word</button>
+          <span class="actions">${botonImagenHtml('Leer datos bancarios (imagen)')} <button class="secondary" data-download="${gi}">Descargar Word</button></span>
         </div>
+        ${bancoGuardadoHtml(g)}
+        ${lecturaHtml(g)}
         <div class="scroll">
         <table>
           <thead><tr><th>Incluir</th><th>Categoría</th><th>C.F.</th><th>Tipo docto.</th><th>Fecha</th><th class="n">Saldo pendiente</th><th>Monto a devolver</th><th>TIPO DE IPE</th></tr></thead>
@@ -503,6 +631,7 @@
       const opts = docOpts();
       const data = devoluciones.devolucionData(g, opts);
       saveAs(renderDevolucion(data).generate({ type: 'blob', mimeType: DOCX_MIME }), devoluciones.fileName(g, opts.fecha));
+      recordarBanco(g);
       registrarDevoluciones([devoluciones.historialEntry(g, data, new Date(), opts)]);
     } catch (err) { alertError(err); }
   }
@@ -518,6 +647,7 @@
         const data = devoluciones.devolucionData(g, opts);
         out.file(devoluciones.fileName(g, opts.fecha), renderDevolucion(data).generate({ type: 'uint8array' }));
         entries.push(devoluciones.historialEntry(g, data, ahora, opts));
+        recordarBanco(g);
       }
       if (!entries.length) return;
       saveAs(out.generate({ type: 'blob' }), `Devoluciones_IPE_${$('cfg-fecha').value}.zip`);
@@ -587,7 +717,7 @@
   }
 
   function backup() {
-    const blob = new Blob([JSON.stringify({ tipo: 'ipe-historial', version: 2, historial: state.historial, historialDevoluciones: state.historialDev }, null, 1)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ tipo: 'ipe-historial', version: 2, historial: state.historial, historialDevoluciones: state.historialDev, datosBancarios: state.bancos }, null, 1)], { type: 'application/json' });
     saveAs(blob, `respaldo_historial_IPE_${hoyISO()}.json`);
   }
 
@@ -607,6 +737,9 @@
       };
       const nm = sumar('historial', memos);
       const nd = sumar('historialDev', devs);
+      Object.entries((!Array.isArray(json) && json.datosBancarios) || {}).forEach(([rut, b]) => {
+        if (!state.bancos[rut] || (b.fecha || '') > (state.bancos[rut].fecha || '')) state.bancos[rut] = b;
+      });
       saveHistoriales();
       reconstruir();
       renderTodo();
@@ -633,6 +766,12 @@
         }
         return refresh(gi);
       }
+      if (e.target.matches('[data-img-input]')) {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (file) rerender.imagen(file, gi);
+        return;
+      }
       const f = e.target.dataset.f;
       if (!f) return;
       const ri = Number(e.target.dataset.r);
@@ -653,6 +792,9 @@
       const gi = Number(card.dataset.g);
       const g = state[grupos][gi];
       if (t.dataset.download !== undefined) rerender.download(gi);
+      else if (t.dataset.img !== undefined) card.querySelector('[data-img-input]').click();
+      else if (t.dataset.bancoSi !== undefined) decidirBanco(g, gi, true);
+      else if (t.dataset.bancoNo !== undefined) decidirBanco(g, gi, false);
       else if (t.dataset.add !== undefined) {
         g.rows[Number(t.dataset.add)].aplicaciones.push({ docto: '', monto: '' });
         rerender.card(gi);
@@ -699,12 +841,19 @@
 
     eventosTarjetas('memos', 'memoGroups', refreshMemo, {
       download: downloadMemo,
+      imagen: leerDocumentos,
       card: (gi) => {
         document.querySelector(`#memos [data-g="${gi}"]`).outerHTML = memoCardHtml(state.memoGroups[gi], gi);
         refreshMemo(gi);
       },
     });
-    eventosTarjetas('devoluciones', 'devGroups', refreshDev, { download: downloadDev, card: () => {} });
+    eventosTarjetas('devoluciones', 'devGroups', refreshDev, { download: downloadDev, imagen: leerBanco, card: () => {} });
+    $('btn-img-memos').addEventListener('click', () => $('img-memos').click());
+    $('img-memos').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (file) leerDocumentos(file);
+    });
     $('btn-zip').addEventListener('click', downloadMemos);
     $('btn-zip-dev').addEventListener('click', downloadDevs);
 

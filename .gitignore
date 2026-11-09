@@ -10,3 +10,6 @@ node_modules/
 
 # Script de construcción de plantilla: contiene textos del memo original (solo local)
 tools/
+
+# Identificador local del proyecto de Apps Script
+backend/.clasp.json

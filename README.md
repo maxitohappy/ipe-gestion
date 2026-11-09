@@ -2,7 +2,7 @@
 
 Aplicación web para la gestión mensual de **ingresos percibidos en exceso (IPE)** a partir del Excel de control.
 
-**Privacidad:** el Excel se procesa solo en el navegador. Ningún dato se envía a internet ni se guarda en este repositorio.
+**Privacidad:** el Excel se procesa solo en el navegador y no se envía a internet. Solo las **imágenes de correos que el usuario sube** salen del navegador: pasan por el backend en Google Apps Script hacia Claude (Anthropic) para leerlas, y el backend no las guarda. Nada de esto queda en este repositorio.
 
 ## Estructura del Excel
 
@@ -22,6 +22,14 @@ Hoja de trabajo con, entre otras, las columnas: `TIPO DE IPE` (B), `MI GESTION` 
 - **Devoluciones:** un **anexo de devolución** en Word por empresa, con el formato de **año en curso** o **años anteriores** según la fecha del IPE (con buscador por RUT o empresa). **OBSERVACIONES** usa la glosa del TIPO DE IPE; en la app se completan el tipo de cuenta, el N° de cuenta, el **banco** (lista de bancos de Chile u "Otro") y los correos. Lo que falte queda resaltado en el Word. Se puede devolver el total o una parte.
 - **Historial de memos** e **Historial de devoluciones:** cada documento descargado queda registrado; se puede volver a descargar, devolver a pendientes, exportar a Excel y respaldar/importar.
 
+### Lectura de imágenes de correos
+
+Usa la misma herramienta de Lector de Boletas: Claude a través de un backend en Google Apps Script ([backend/LEEME.md](backend/LEEME.md)). Lo leído siempre queda editable, con la imagen a la vista y advertencias cuando algo no cuadra.
+
+- **Memos:** con **Leer correo (imagen)** (arriba o en la tarjeta), la app identifica al cliente por RUT o razón social, recorre sus IPE incluidos y asigna los documentos en el orden del correo: *Pagar* si el saldo cubre el documento y *Abonar* si cubre una parte. Advierte si el saldo o el RUT del correo difieren del Excel.
+- **Devoluciones:** con **Leer datos bancarios (imagen)** se completan tipo de cuenta, número, banco y correos (excluye los de la DGAC). Advierte si el beneficiario tiene otro RUT.
+- **Datos bancarios guardados:** al descargar el Word quedan guardados por RUT en este navegador (se incluyen en el respaldo). En una devolución futura aparece *"Este cliente registra los siguientes datos bancarios… ¿Confirma?"*: **Sí** los pasa a la tarjeta y al Word; **No** pide subir la imagen.
+
 ### Saldo pendiente entre meses
 
 Cada movimiento del historial guarda el saldo que tenía el IPE en el Excel. Al cargar un Excel nuevo, los movimientos aún no reflejados (mismo saldo) se descuentan; si el saldo del Excel ya cambió, se toma el saldo del Excel. Un IPE desaparece de Memos/Devoluciones cuando su saldo pendiente llega a cero.
@@ -38,9 +46,9 @@ Cada movimiento del historial guarda el saldo que tenía el IPE en el Excel. Al 
 ## Uso sin internet (respaldo)
 
 1. Descarga la versión local desde **"Descargar versión sin internet"** (o https://github.com/maxitohappy/ipe-gestion/archive/refs/heads/main.zip).
-2. Descomprime el .zip y abre **index.html** con doble clic (Chrome o Edge). Arriba aparecerá *"Modo sin internet"*.
+2. Descomprime el .zip y abre **index.html** con doble clic (Chrome o Edge). Arriba aparecerá *"Modo sin internet"*. La lectura de imágenes sí necesita internet; sin conexión, los datos se completan a mano.
 
-El historial se guarda por separado en cada modo; para pasarlo de uno a otro usa **Descargar respaldo** e **Importar respaldo**.
+El historial y los datos bancarios se guardan por separado en cada modo; para pasarlo de uno a otro usa **Descargar respaldo** e **Importar respaldo**.
 
 ## Desarrollo
 
