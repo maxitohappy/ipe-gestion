@@ -67,7 +67,7 @@ Plantillas (`templates/`), editables en Word conservando los marcadores:
 
 Los textos con datos a completar se pasan como listas de partes `{#campo}{#n}{t}{/n}{#m}{t}{/m}{/campo}` (`m` = resaltado).
 
-- `aplicacion_actual.docx` / `aplicacion_anterior.docx` (anexo de aplicación, año en curso / años anteriores): `{razon_social}`, `{rut}`, párrafos `{#motivos}{#primero}MOTIVO:{/primero} {doc} {nro}: {justificacion…}{/motivos}`, fila `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}` y párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}`.
-- `devolucion_actual.docx` / `devolucion_anterior.docx` (anexo de devolución): `{rut}`, `{razon_social}`, fila `{#items}{cf} {tipo_docto} {monto} {observaciones…}{/items}`, `{tipo_cuenta…}`, `{numero_cuenta…}`, `{banco…}`, `{monto_total}` y correos (`{#correos}{correo}{/correos}` en año en curso; `{correos_linea}` en años anteriores).
+- `aplicacion_actual.docx` / `aplicacion_anterior.docx` (memorando de aplicación, año en curso / años anteriores): `{razon_social}`, `{rut}`, párrafos `{#motivos}{#primero}MOTIVO{/primero} {#primero}:{/primero} {doc} {nro}: {justificacion…}{/motivos}`, fila `{#items}{doc} {nro} {monto} {docto_aplicar} {monto_aplicar}{/items}`, párrafos `{#notas}… {doc} {nro} por {remanente}…{/notas}` y `ERS/…/ {razon_social}` en el pie. El N° de memorando queda en blanco.
+- `devolucion_actual.docx` / `devolucion_anterior.docx` (oficio de devolución): `{rut}`, `{razon_social}`, fila `{#items}{cf} {tipo_docto} {monto} {observaciones…}{/items}`, `{tipo_cuenta…}`, `{numero_cuenta…}`, `{banco…}`, `{monto_total}`, correos (`{#correos}{correo}{/correos}` en año en curso; `{correos_linea}` en años anteriores) y `ERS/…/ {razon_social}` en el pie. En *REF.* quedan `[correo]`, `[fecha]` y `[hora]` resaltados para completar en Word; el N° de oficio queda en blanco.
 
 Las glosas por tipo de IPE están en `js/glosas.js`.
